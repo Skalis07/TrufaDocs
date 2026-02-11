@@ -250,6 +250,10 @@ def _split_trailing_location(line: str) -> Tuple[str, str, str]:
     candidate = (line or "").strip()
     if not candidate or "," not in candidate:
         return candidate, "", ""
+    # Evita confundir líneas de detalle/listas con ubicación.
+    # La ubicación esperada en este parser es "Ciudad, País" (una sola coma).
+    if candidate.count(",") != 1:
+        return candidate, "", ""
 
     last_comma = candidate.rfind(",")
     left_part = candidate[:last_comma].strip()
@@ -884,7 +888,7 @@ def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
                 if not entry["title"]:
                     entry["title"] = line.strip()
                     continue
-            if _looks_like_location(line) and not entry["city"]:
+            if _looks_like_location(line) and not entry["city"] and line.count(",") <= 1:
                 city, country = _parse_location(line)
                 if city:
                     entry["city"] = city

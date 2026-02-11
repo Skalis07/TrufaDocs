@@ -1,17 +1,30 @@
+# ------------------------------
+# Environment / local secrets
+# ------------------------------
 .env
 .venv/
+
+# ------------------------------
+# Python / tooling caches
+# ------------------------------
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ------------------------------
+# Runtime / editor artifacts
+# ------------------------------
 *.log
 *.tmp
 *.swp
 Thumbs.db
 .DS_Store
+
+# ------------------------------
+# Django local/generated files
+# ------------------------------
 db.sqlite3
 media/
 staticfiles/
-fonts/
-static/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
