@@ -1,0 +1,963 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TrufaDocs - {{ filename }}</title>
+    <link rel="icon" href="{% static 'editor/favicons/favicon.ico' %}" type="image/x-icon" />
+    <link rel="stylesheet" href="{% static 'editor/styles.css' %}" />
+  </head>
+  <body>
+    <main class="shell wide">
+      <!-- Encabezado principal -->
+      <header class="hero compact hero-photo">
+        <span class="hero-overlay" aria-hidden="true"></span>
+        <div class="hero-content">
+          <div class="hero-top">
+            <div class="badge">TrufaDocs</div>
+            <div class="hero-actions">
+              <details class="help">
+                <summary class="help-toggle" aria-label="Sobre esta web"><span class="help-icon">?</span></summary>
+                <div class="help-pop">
+                  <strong>TrufaDocs · Editor de CV profesional</strong>
+                  <p>
+                    Aplicacion web para ayudarte a estructurar y editar tu CV con un formato limpio y consistente.
+                  </p>
+                </div>
+              </details>
+              <button
+                type="button"
+                class="theme-toggle"
+                data-theme-toggle
+                aria-pressed="false"
+                aria-label="Cambiar a modo nocturno"
+                title="Cambiar a modo nocturno"
+              >
+                <span class="theme-icon theme-sun" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"></circle>
+                    <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="4.5" y1="4.5" x2="6.8" y2="6.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="17.2" y1="17.2" x2="19.5" y2="19.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="4.5" y1="19.5" x2="6.8" y2="17.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                    <line x1="17.2" y1="6.8" x2="19.5" y2="4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></line>
+                  </svg>
+                </span>
+                <span class="theme-icon theme-moon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path
+                      d="M21 14.5A9 9 0 1 1 9.5 3a7 7 0 1 0 11.5 11.5z"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </div>
+          <h1>TrufaDocs</h1>
+          <p>Detecta campos clave y exporta con un formato consistente.</p>
+        </div>
+      </header>
+
+      {% if error %}
+      <div class="alert">{{ error }}</div>
+      {% endif %}
+
+      <!-- Panel de carga inicial -->
+      <section class="panel upload-panel">
+        <form method="post" action="{% url 'text_upload' %}" enctype="multipart/form-data" class="stack upload-stack">
+          {% csrf_token %}
+          <input type="hidden" name="core_order" id="upload-core-order" value="{{ structured.meta.core_order|default:'experience,education,skills' }}">
+          <label class="file">
+            <span>Sube tu CV (.docx o .pdf) para detectar campos</span>
+            <input type="file" name="file" accept=".docx,.pdf" required />
+          </label>
+          <button type="submit" class="primary upload-detect-btn">Detectar campos</button>
+        </form>
+        <div class="divider upload-divider">o</div>
+        <div class="actions upload-actions">
+          <a class="ghost" href="{% url 'index' %}">Empezar desde cero</a>
+        </div>
+      </section>
+
+      <!-- Editor estructurado -->
+      <section class="panel">
+        <form method="post" class="stack" id="structured-form">
+          <input type="hidden" name="core_order" id="core-order" value="{{ structured.meta.core_order|default:'experience,education,skills' }}">
+          <input type="hidden" name="module_order_map" id="module-order-map" value="">
+          {% csrf_token %}
+          <input type="hidden" name="filename" value="{{ filename|default:'document' }}" />
+
+          <div class="split">
+            <div class="col">
+              <!-- Datos generales del documento -->
+              <div class="section">
+                <div class="section-header">
+                  <h2>Documento</h2>
+                </div>
+                <div class="grid-two">
+                  <div class="field">
+                    <label>Fuente</label>
+                    <select name="doc_font">
+                      <option value="" {% if not selected_font %}selected{% endif %}>Fuente de la plantilla</option>
+                      {% for font in font_choices %}
+                      <option value="{{ font }}" {% if font == selected_font %}selected{% endif %}>{{ font }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="section">
+                <!-- Datos básicos (perfil) -->
+                <div class="section-header">
+                  <h2>Datos básicos</h2>
+                </div>
+                <div class="grid-two">
+                  <div class="field">
+                    <label>Nombre</label>
+                    <input type="text" name="name" value="{{ structured.basics.name }}" />
+                  </div>
+                  <div class="field full">
+                    <label>Descripción / Perfil</label>
+                    <textarea name="description" rows="2">{{ structured.basics.description }}</textarea>
+                  </div>
+                  <div class="field">
+                    <label>Correo</label>
+                    <input type="email" name="email" value="{{ structured.basics.email }}" />
+                  </div>
+                  <div class="field">
+                    <label>Número</label>
+                    <input type="text" name="phone" value="{{ structured.basics.phone }}" />
+                  </div>
+                  <div class="field">
+                    <label>LinkedIn</label>
+                    <input type="text" name="linkedin" value="{{ structured.basics.linkedin }}" />
+                  </div>
+                  <div class="field">
+                    <label>GitHub</label>
+                    <input type="text" name="github" value="{{ structured.basics.github }}" />
+                  </div>
+                  <div class="field">
+                    <label>País</label>
+                    <select name="country" data-country-select>
+                      <option value="">Selecciona país</option>
+                      {% for country in country_choices %}
+                      <option value="{{ country }}" {% if country == structured.basics.country %}selected{% endif %}>
+                        {{ country }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label>Ciudad</label>
+                    <input type="text" name="city" value="{{ structured.basics.city }}" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="stack" data-modules id="modules-list">
+              <div class="section module-block" data-module-key="experience">
+                <!-- Experiencia laboral -->
+                <div class="section-header">
+<div class="module-head" data-module-key="experience">
+  <h2>Experiencia</h2>
+  <div class="module-move">
+    <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+    <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+  </div>
+</div>
+                </div>
+                <div id="experience-list" class="stack">
+                  {% for exp in structured.experience %}
+                  <div class="repeat">
+                    <div class="repeat-header">
+                      <span>Experiencia {{ forloop.counter }}</span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Rol</label>
+                        <input type="text" name="exp_role" value="{{ exp.role }}" />
+                      </div>
+                      <div class="field">
+                        <label>Empresa</label>
+                        <input type="text" name="exp_company" value="{{ exp.company }}" />
+                      </div>
+                      <div class="field">
+                        <label>Fecha inicio</label>
+                        <div class="date-field" data-date-field>
+                          <input type="hidden" name="exp_start" value="{{ exp.start }}" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="{{ year }}">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label>Fecha fin</label>
+                        <div class="date-field" data-date-field data-date-end>
+                          <input type="hidden" name="exp_end" value="{{ exp.end }}" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="{{ year }}">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                          <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                            Este es mi puesto actual
+                          </label>
+                        </div>
+                      </div>
+<div class="field">
+                        <label>País</label>
+                        <select name="exp_country" data-country-select>
+                          <option value="">Selecciona país</option>
+                          {% for country in country_choices %}
+                          <option value="{{ country }}" {% if country == exp.country %}selected{% endif %}>{{ country }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>Ciudad</label>
+                        <input type="text" name="exp_city" value="{{ exp.city }}" />
+                      </div>
+                      <div class="field">
+                        <label>Detalle (opcional)</label>
+                        <input type="text" name="exp_tech" value="{{ exp.technologies }}" />
+                      </div>
+                      <div class="field full">
+                        <label>Hitos alcanzados (uno por línea)</label>
+                        <div class="highlight-block" data-highlight-block>
+                          <div class="highlight-list">
+                            {% if exp.highlights %}
+                            {% for highlight in exp.highlights %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="{{ highlight }}" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endif %}
+                          </div>
+                          <div class="highlight-actions">
+                            <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+                          </div>
+                          <textarea name="exp_highlights" class="highlight-textarea" hidden>{{ exp.highlights|join:"\n" }}</textarea>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="section-actions">
+                  <button type="button" class="ghost small add-btn" data-add="experience">Agregar experiencia</button>
+                </div>
+              </div>
+
+              <div class="section module-block" data-module-key="education">
+                <!-- Educación -->
+                <div class="section-header">
+                  <div class="module-head" data-module-key="education">
+  <h2>Educación</h2>
+  <div class="module-move">
+    <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+    <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+  </div>
+</div>
+                </div>
+                <div id="education-list" class="stack">
+                  {% for edu in structured.education %}
+                  <div class="repeat">
+                    <div class="repeat-header">
+                      <span>Educación {{ forloop.counter }}</span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Título</label>
+                        <input type="text" name="edu_degree" value="{{ edu.degree }}" />
+                      </div>
+                      <div class="field">
+                        <label>Dónde</label>
+                        <input type="text" name="edu_institution" value="{{ edu.institution }}" />
+                      </div>
+                                            <div class="field">
+                        <label>Fecha inicio</label>
+                        <div class="date-field" data-date-field>
+                          <input type="hidden" name="edu_start" value="{{ edu.start }}" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="{{ year }}">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label>Fecha fin</label>
+                        <div class="date-field" data-date-field data-date-end>
+                          <input type="hidden" name="edu_end" value="{{ edu.end }}" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="{{ year }}">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                          <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                            En curso
+                          </label>
+                        </div>
+                      </div>
+<div class="field">
+                        <label>País</label>
+                        <select name="edu_country" data-country-select>
+                          <option value="">Selecciona país</option>
+                          {% for country in country_choices %}
+                          <option value="{{ country }}" {% if country == edu.country %}selected{% endif %}>{{ country }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>Ciudad</label>
+                        <input type="text" name="edu_city" value="{{ edu.city }}" />
+                      </div>
+                      <div class="field full">
+                        <label>Honores</label>
+                        <input type="text" name="edu_honors" value="{{ edu.honors }}" />
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="section-actions">
+                  <button type="button" class="ghost small add-btn" data-add="education">Agregar educación</button>
+                </div>
+              </div>
+
+              <div class="section module-block" data-module-key="skills">
+                <!-- Habilidades -->
+                <div class="section-header">
+                  <div class="module-head" data-module-key="skills">
+  <h2>Habilidades</h2>
+  <div class="module-move">
+    <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+    <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+  </div>
+</div>
+                </div>
+                <div id="skills-list" class="stack">
+                  {% for skill in structured.skills %}
+                  <div class="repeat compact">
+                    <div class="repeat-header">
+                      <span>Categoría {{ forloop.counter }}</span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Subtítulo</label>
+                        <input type="text" name="skill_category" value="{{ skill.category }}" />
+                      </div>
+                      <div class="field">
+                        <label>Items (opcional)</label>
+                        <input type="text" name="skill_items" value="{{ skill.items }}" />
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+                <div class="section-actions">
+                  <button type="button" class="ghost small add-btn" data-add="skills">Agregar categoría</button>
+                </div>
+              </div>
+
+              
+  
+              {# --- Extras como módulos movibles --- #}
+              {% for extra in structured.extra_sections %}
+              <div class="section module-block" data-module-key="{{ extra.section_id|default:forloop.counter0 }}">
+                <div class="module-head" data-module-key="{{ extra.section_id|default:forloop.counter0 }}">
+                  <h2>
+                    <span class="pill pill-extra">Extra</span>
+                    <span data-module-name>{{ extra.title|default:"(sin título)" }}</span>
+                  </h2>
+                  <div class="module-move">
+                    <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+                    <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+                    <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+                  </div>
+                </div>
+
+                <div class="module-body" data-extra-section>
+                  <input type="hidden" name="extra_section_id" value="{{ extra.section_id|default:forloop.counter0 }}" />
+
+                  <div class="grid-two">
+                    <div class="field full">
+                      <label>Nombre de módulo</label>
+                      <input type="text" name="extra_title" value="{{ extra.title|default:'' }}" data-extra-title />
+                    </div>
+                    <div class="field">
+                      <label>Tipo de módulo</label>
+                      <select name="extra_mode" data-extra-mode class="mode-select" style="width:100%">
+                        <option value="subtitle_items" {% if extra.mode == "subtitle_items" or extra.mode == "subtitle+items" or extra.mode == "" %}selected{% endif %}>Subtítulo+Items</option>
+                        <option value="detailed" {% if extra.mode == "detailed" %}selected{% endif %}>Detallado</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="stack" data-extra-entries>
+                    {% for entry in extra.entries %}
+                    <div class="repeat sub" data-extra-entry>
+                      <div class="repeat-header">
+                        <span>Entrada {{ forloop.counter }}</span>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
+
+                      <input type="hidden" name="extra_entry_section" value="{{ extra.section_id|default:forloop.parentloop.counter0 }}" />
+
+                      <div class="field full" data-extra-entry-show="subtitle_items">
+                        <label>Categoría (subtítulo)</label>
+                        <input type="text" name="extra_entry_subtitle" value="{{ entry.subtitle|default:'' }}" />
+                      </div>
+
+                      <div class="grid-two" data-extra-entry-show="detailed">
+                        <div class="field">
+                          <label>Empresa/Proyecto</label>
+                          <input type="text" name="extra_entry_where" value="{{ entry.where|default:'' }}" />
+                        </div>
+                        <div class="field">
+                          <label>Rol/Curso</label>
+                          <input type="text" name="extra_entry_title" value="{{ entry.title|default:'' }}" />
+                        </div>
+                      </div>
+
+                      <div class="field full" data-extra-entry-show="detailed">
+                        <label>Detalle (opcional)</label>
+                        <input type="text" name="extra_entry_tech" value="{{ entry.tech|default:'' }}" />
+                      </div>
+
+                      <div class="grid-two" data-extra-entry-show="detailed">
+                        <div class="field">
+                          <label>País</label>
+                          <select name="extra_entry_country" data-country-select>
+                            <option value="">Selecciona país</option>
+                            {% for country in country_choices %}
+                            <option value="{{ country }}" {% if entry.country == country %}selected{% endif %}>{{ country }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>Ciudad</label>
+                          <input type="text" name="extra_entry_city" value="{{ entry.city|default:'' }}" />
+                        </div>
+                      </div>
+
+                      <div class="grid-two" data-extra-entry-show="detailed">
+                        <div class="field">
+                          <label>Fecha inicio</label>
+                          <div class="date-field" data-date-field>
+                            <input type="hidden" name="extra_entry_start" value="{{ entry.start|default:'' }}" />
+                            <div class="date-row">
+                              <select class="year-select" data-year-select>
+                                <option value="">Año</option>
+                                {% for year in year_choices %}
+                                <option value="{{ year }}">{{ year }}</option>
+                                {% endfor %}
+                              </select>
+                              <select class="month-select" data-month-select>
+                                <option value="">Mes</option>
+                                <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                                <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                                <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="field">
+                          <label>Fecha fin</label>
+                          <div class="date-field" data-date-field data-date-end>
+                            <input type="hidden" name="extra_entry_end" value="{{ entry.end|default:'' }}" />
+                            <div class="date-row">
+                              <select class="year-select" data-year-select>
+                                <option value="">Año</option>
+                                {% for year in year_choices %}
+                                <option value="{{ year }}">{{ year }}</option>
+                                {% endfor %}
+                              </select>
+                              <select class="month-select" data-month-select>
+                                <option value="">Mes</option>
+                                <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                                <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                                <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                              </select>
+                            </div>
+                            <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                              Actualidad
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="field full" data-extra-entry-show="detailed">
+                        <label>Hitos alcanzados (uno por línea)</label>
+                        <div class="highlight-block" data-highlight-block>
+                          <div class="highlight-list">
+                            {% if entry.items %}
+                            {% for highlight in entry.items %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="{{ highlight }}" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endif %}
+                          </div>
+                          <div class="highlight-actions">
+                            <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+                          </div>
+                          <textarea name="extra_entry_items_detailed" class="highlight-textarea" hidden>{{ entry.items|join:"\n" }}</textarea>
+                        </div>
+                      </div>
+
+                      <div class="field full" data-extra-entry-show="subtitle_items">
+                        <label>Items (opcional)</label>
+                        <textarea name="extra_entry_items_si" rows="3">{{ entry.items|join:"; " }}</textarea>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+
+                  <div class="section-actions">
+                    <button type="button" class="ghost small add-btn" data-action="add-extra-entry">Agregar entrada</button>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+
+              {# --- Módulo fijo para agregar extras (siempre al final) --- #}
+              <div class="section module-block module-add" data-add-module>
+                <div class="module-head">
+                  <h2>Agregar módulo extra</h2>
+                  <div class="module-move">
+                    <button type="button" class="btn-move" data-action="add-extra-module" title="Agregar">+</button>
+                  </div>
+                </div>
+              </div>
+
+              <input type="hidden" name="use_structured" value="1" />
+              <div class="actions export-actions">
+                <button type="submit" class="btn-export btn-export-docx" formaction="{% url 'export_docx' %}">Exportar DOCX</button>
+                <button type="submit" class="btn-export btn-export-pdf" formaction="{% url 'export_pdf' %}">Exportar PDF</button>
+              </div>
+
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+<template id="tpl-experience">
+<div class="repeat">
+                    <div class="repeat-header">
+                      <span>Experiencia </span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Rol</label>
+                        <input type="text" name="exp_role" value="" />
+                      </div>
+                      <div class="field">
+                        <label>Empresa</label>
+                        <input type="text" name="exp_company" value="" />
+                      </div>
+                      <div class="field">
+                        <label>Fecha inicio</label>
+                        <div class="date-field" data-date-field>
+                          <input type="hidden" name="exp_start" value="" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label>Fecha fin</label>
+                        <div class="date-field" data-date-field data-date-end>
+                          <input type="hidden" name="exp_end" value="" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                          <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                            Este es mi puesto actual
+                          </label>
+                        </div>
+                      </div>
+<div class="field">
+                        <label>País</label>
+                        <select name="exp_country" data-country-select>
+                          <option value="">Selecciona país</option>
+                          {% for country in country_choices %}
+                          <option value="" {% if country == exp.country %}selected{% endif %}>{{ country }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>Ciudad</label>
+                        <input type="text" name="exp_city" value="" />
+                      </div>
+                      <div class="field">
+                        <label>Detalle (opcional)</label>
+                        <input type="text" name="exp_tech" value="" />
+                      </div>
+                      <div class="field full">
+                        <label>Hitos alcanzados (uno por línea)</label>
+                        <div class="highlight-block" data-highlight-block>
+                          <div class="highlight-list">
+                            {% if exp.highlights %}
+                            {% for highlight in exp.highlights %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endif %}
+                          </div>
+                          <div class="highlight-actions">
+                            <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+                          </div>
+                          <textarea name="exp_highlights" class="highlight-textarea" hidden></textarea>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+</template>
+<template id="tpl-education">
+<div class="repeat">
+                    <div class="repeat-header">
+                      <span>Educación </span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Título</label>
+                        <input type="text" name="edu_degree" value="" />
+                      </div>
+                      <div class="field">
+                        <label>Dónde</label>
+                        <input type="text" name="edu_institution" value="" />
+                      </div>
+                                            <div class="field">
+                        <label>Fecha inicio</label>
+                        <div class="date-field" data-date-field>
+                          <input type="hidden" name="edu_start" value="" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="field">
+                        <label>Fecha fin</label>
+                        <div class="date-field" data-date-field data-date-end>
+                          <input type="hidden" name="edu_end" value="" />
+                          <div class="date-row">
+                            <select class="year-select" data-year-select>
+                              <option value="">Año</option>
+                              {% for year in year_choices %}
+                              <option value="">{{ year }}</option>
+                              {% endfor %}
+                            </select>
+                            <select class="month-select" data-month-select>
+                              <option value="">Mes</option>
+                              <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                              <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                              <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                            </select>
+                          </div>
+                          <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                            En curso
+                          </label>
+                        </div>
+                      </div>
+<div class="field">
+                        <label>País</label>
+                        <select name="edu_country" data-country-select>
+                          <option value="">Selecciona país</option>
+                          {% for country in country_choices %}
+                          <option value="" {% if country == edu.country %}selected{% endif %}>{{ country }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label>Ciudad</label>
+                        <input type="text" name="edu_city" value="" />
+                      </div>
+                      <div class="field full">
+                        <label>Honores</label>
+                        <input type="text" name="edu_honors" value="" />
+                      </div>
+                    </div>
+                  </div>
+</template>
+<template id="tpl-skills">
+<div class="repeat compact">
+                    <div class="repeat-header">
+                      <span>Categoría </span>
+                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                    </div>
+                    <div class="grid-two">
+                      <div class="field">
+                        <label>Subtítulo</label>
+                        <input type="text" name="skill_category" value="" />
+                      </div>
+                      <div class="field">
+                        <label>Items (opcional)</label>
+                        <input type="text" name="skill_items" value="" />
+                      </div>
+                    </div>
+                  </div>
+</template>
+<template id="tpl-extra-module">
+      <!-- Template clonable para MÓDULO extra (movible) -->
+      <div class="section module-block" data-module-key="">
+        <div class="module-head">
+          <h2>
+            <span class="pill pill-extra">Extra</span>
+            <span data-module-name>(sin título)</span>
+          </h2>
+          <div class="module-move">
+            <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+            <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+            <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+          </div>
+        </div>
+
+        <div class="module-body" data-extra-section>
+          <input type="hidden" name="extra_section_id" value="" />
+          <div class="grid-two">
+            <div class="field full">
+              <label>Nombre de módulo</label>
+              <input type="text" name="extra_title" value="" data-extra-title />
+            </div>
+            <div class="field">
+              <label>Tipo de módulo</label>
+              <select name="extra_mode" data-extra-mode class="mode-select" style="width:100%">
+                <option value="subtitle_items" selected>Subtítulo+Items</option>
+                <option value="detailed">Detallado</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="stack" data-extra-entries></div>
+
+          <div class="section-actions">
+            <button type="button" class="ghost small add-btn" data-action="add-extra-entry">Agregar entrada</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+
+    <template id="tpl-extra-entry">
+      <!-- Template clonable para entradas dentro de seccion extra -->
+      <div class="repeat sub" data-extra-entry>
+        <div class="repeat-header">
+          <span>Entrada</span>
+          <button type="button" class="ghost small" data-remove>Eliminar</button>
+        </div>
+
+        <input type="hidden" name="extra_entry_section" value="" />
+<div class="field full" data-extra-entry-show="subtitle_items">
+          <label>Subtítulo</label>
+          <input type="text" name="extra_entry_subtitle" />
+        </div>
+
+        <div class="grid-two" data-extra-entry-show="detailed">
+          <div class="field">
+            <label>Empresa/Proyecto</label>
+            <input type="text" name="extra_entry_where" />
+          </div>
+          <div class="field">
+            <label>Rol/Curso</label>
+            <input type="text" name="extra_entry_title" />
+          </div>
+        </div>
+
+        <div class="field full" data-extra-entry-show="detailed">
+          <label>Detalle (opcional)</label>
+          <input type="text" name="extra_entry_tech" />
+        </div>
+
+        <div class="grid-two" data-extra-entry-show="detailed">
+          <div class="field">
+            <label>País</label>
+            <select name="extra_entry_country" data-country-select>
+              <option value="">Selecciona país</option>
+              {% for country in country_choices %}
+              <option value="{{ country }}">{{ country }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Ciudad</label>
+            <input type="text" name="extra_entry_city" />
+          </div>
+        </div>
+
+        <div class="grid-two" data-extra-entry-show="detailed">
+          <div class="field">
+            <label>Fecha inicio</label>
+            <div class="date-field" data-date-field>
+              <input type="hidden" name="extra_entry_start" />
+              <div class="date-row">
+                <select class="year-select" data-year-select>
+                  <option value="">Año</option>
+                  {% for year in year_choices %}
+                  <option value="{{ year }}">{{ year }}</option>
+                  {% endfor %}
+                </select>
+                <select class="month-select" data-month-select>
+                  <option value="">Mes</option>
+                  <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                  <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                  <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Fecha fin</label>
+            <div class="date-field" data-date-field data-date-end>
+              <input type="hidden" name="extra_entry_end" />
+              <div class="date-row">
+                <select class="year-select" data-year-select>
+                  <option value="">Año</option>
+                  {% for year in year_choices %}
+                  <option value="{{ year }}">{{ year }}</option>
+                  {% endfor %}
+                </select>
+                <select class="month-select" data-month-select>
+                  <option value="">Mes</option>
+                  <option value="01">Ene</option><option value="02">Feb</option><option value="03">Mar</option><option value="04">Abr</option>
+                  <option value="05">May</option><option value="06">Jun</option><option value="07">Jul</option><option value="08">Ago</option>
+                  <option value="09">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+                </select>
+              </div>
+                          <label class="date-current date-current-below"><input type="checkbox" data-role-current />
+                            Actualidad
+                          </label>
+                        </div>
+          </div>
+        </div>
+
+        
+        
+        <div class="field full" data-extra-entry-show="detailed">
+          <label>Hitos alcanzados (uno por línea)</label>
+          <div class="highlight-block" data-highlight-block>
+            <div class="highlight-list"></div>
+            <div class="highlight-actions">
+              <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+            </div>
+            <textarea name="extra_entry_items_detailed" class="highlight-textarea" hidden></textarea>
+          </div>
+        </div>
+
+<div class="field full" data-extra-entry-show="subtitle_items">
+          <label>Items (opcional)</label>
+          <textarea name="extra_entry_items_si" rows="4" placeholder="Un item por línea"></textarea>
+        </div>
+
+      </div>
+    </template>
+
+    <script src="{% static 'editor/editor.js' %}"></script>
+    </main>
+  </body>
+</html>

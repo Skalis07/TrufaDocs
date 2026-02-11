@@ -1,0 +1,190 @@
+from __future__ import annotations
+
+from typing import Iterable
+
+from .assemble import assemble_sections
+from .constants import HONORS_PREFIX_RE, URL_RE
+from .extract import extract_lines
+from .parsers import parse_education, parse_experience, parse_skills
+
+from .. import structure
+
+
+def _strip_prefix(text: str, pattern) -> str:
+    if not text:
+        return ""
+    return pattern.sub("", text).strip()
+
+
+def _map_date_range(date_range: str) -> tuple[str, str]:
+    if not date_range:
+        return "", ""
+    start, end, _ = structure._extract_date_range_from_line(date_range)
+    return start, end
+
+
+def _map_location(value: str) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    city, country = structure._parse_location(value)
+    return city, country
+
+
+def _map_tech(value: str) -> str:
+    if not value:
+        return ""
+    mapped = structure._extract_tech_from_line(value)
+    if mapped:
+        return mapped
+    return str(value).strip()
+
+
+def _select_link(links: Iterable[str], keyword: str) -> str:
+    keyword = keyword.lower()
+    for link in links:
+        if keyword in link.lower():
+            return link
+    return ""
+
+
+def _infer_description(header_lines, header_name: str | None, location: str | None, contacts: list[str]) -> str:
+    description_parts: list[str] = []
+    for line in header_lines:
+        text = line.text.strip()
+        if not text:
+            continue
+        if header_name and text == header_name:
+            continue
+        if location and text == location:
+            continue
+        if URL_RE.search(text):
+            continue
+        if any(contact and contact in text for contact in contacts):
+            continue
+        description_parts.append(text)
+    return " ".join(description_parts).strip()
+
+
+def _map_experience(blocks: list[dict]) -> list[dict]:
+    mapped: list[dict] = []
+    for block in blocks:
+        start, end = _map_date_range(block.get("date_range") or "")
+        city, country = _map_location(block.get("location") or "")
+        technologies = _map_tech(block.get("meta_tech") or "")
+        highlights: list[str] = []
+        for item in block.get("items", []):
+            text = item.get("text") if isinstance(item, dict) else str(item)
+            if text:
+                highlights.append(text)
+        for extra in block.get("extra", []) or []:
+            if extra:
+                highlights.append(extra)
+        mapped.append(
+            {
+                "role": block.get("role") or "",
+                "company": block.get("org") or "",
+                "start": start,
+                "end": end,
+                "city": city,
+                "country": country,
+                "technologies": technologies,
+                "highlights": highlights,
+            }
+        )
+    return mapped
+
+
+def _map_education(blocks: list[dict]) -> list[dict]:
+    mapped: list[dict] = []
+    for block in blocks:
+        start, end = _map_date_range(block.get("date_range") or "")
+        city, country = _map_location(block.get("location") or "")
+        honors = _strip_prefix(block.get("honors") or "", HONORS_PREFIX_RE)
+        mapped.append(
+            {
+                "degree": block.get("program") or "",
+                "institution": block.get("org") or "",
+                "start": start,
+                "end": end,
+                "city": city,
+                "country": country,
+                "honors": honors,
+            }
+        )
+    return mapped
+
+
+def _map_skills(groups: list[dict]) -> list[dict]:
+    mapped: list[dict] = []
+    for group in groups:
+        title = group.get("group_title") or ""
+        values = group.get("values") or []
+        items = ", ".join(value for value in values if value)
+        mapped.append({"category": title, "items": items})
+    return mapped
+
+
+def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
+    try:
+        lines = extract_lines(file_obj)
+    except Exception as exc:
+        detail = str(exc).strip()
+        return structure.default_structure(), (
+            f"No se pudo leer el PDF: {detail or 'error desconocido.'}"
+        )
+
+    if not lines:
+        return structure.default_structure(), "No se pudo extraer texto del PDF."
+
+    assembled = assemble_sections(lines)
+    header = assembled["header"]
+    header_lines = assembled["header_lines"]
+
+    data = structure.default_structure()
+    data["experience"] = []
+    data["education"] = []
+    data["skills"] = []
+
+    basics = data["basics"]
+    basics["name"] = header.get("name") or ""
+    basics["email"] = header.get("email") or ""
+    basics["phone"] = header.get("phone") or ""
+
+    links = header.get("links") or []
+    basics["linkedin"] = _select_link(links, "linkedin")
+    basics["github"] = _select_link(links, "github")
+
+    header_location = header.get("location")
+    if header_location:
+        city, country = _map_location(header_location)
+        basics["city"] = city
+        basics["country"] = country
+
+    contacts = [basics["email"], basics["phone"], basics["linkedin"], basics["github"]]
+    basics["description"] = _infer_description(header_lines, basics["name"], header_location, contacts)
+
+    extras_raw: list[structure.ExtraSectionRaw] = []
+
+    for section in assembled["sections"]:
+        title = section.get("title") or ""
+        raw_lines = section.get("raw") or []
+
+        if title in {"EXPERIENCIA", "EXPERIENCIA PROFESIONAL", "EXPERIENCIA LABORAL"}:
+            data["experience"].extend(_map_experience(parse_experience(raw_lines)))
+            continue
+        if title in {"EDUCACIÓN", "EDUCACION"}:
+            data["education"].extend(_map_education(parse_education(raw_lines)))
+            continue
+        if title == "HABILIDADES":
+            data["skills"].extend(_map_skills(parse_skills(raw_lines)))
+            continue
+
+        extra_lines = [entry for entry in raw_lines if entry.get("text")]
+        if extra_lines:
+            extras_raw.append({"title": title, "lines": extra_lines})
+
+    if extras_raw:
+        data["extra_sections"] = structure._parse_extras(extras_raw)
+
+    structure._ensure_minimums(data)
+    return data, None
