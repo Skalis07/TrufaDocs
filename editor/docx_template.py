@@ -650,6 +650,11 @@ def _apply_module_order(table, structured: dict, extra_blocks: list[dict[str, An
     if not final_modules:
         return
 
+    spacer_template = None
+    spacer_idx = _find_any_blank_row_without_borders(table)
+    if spacer_idx is not None:
+        spacer_template = deepcopy(table.rows[spacer_idx]._tr)
+
     rows_to_move: list[Any] = []
     rows_to_move_ids: set[int] = set()
     for module_id in current_modules:
@@ -674,7 +679,8 @@ def _apply_module_order(table, structured: dict, extra_blocks: list[dict[str, An
 
     inserted_rows: set[int] = set()
     cursor = insert_at
-    for module_id in final_modules:
+    for module_idx, module_id in enumerate(final_modules):
+        module_inserted = False
         for tr in module_rows.get(module_id, []):
             tr_id = id(tr)
             if tr_id in inserted_rows:
@@ -682,6 +688,18 @@ def _apply_module_order(table, structured: dict, extra_blocks: list[dict[str, An
             _insert_row_before(table, cursor, tr)
             cursor += 1
             inserted_rows.add(tr_id)
+            module_inserted = True
+        if (
+            module_inserted
+            and module_idx < len(final_modules) - 1
+            and spacer_template is not None
+            and cursor > 0
+        ):
+            previous_row = table.rows[cursor - 1]
+            if not _is_blank_row(previous_row):
+                _insert_row_before(table, cursor, deepcopy(spacer_template))
+                _clear_row_height(table.rows[cursor])
+                cursor += 1
 
 def _fill_experience_role_row(row, item: dict) -> None:
     cells = _unique_cells(row)

@@ -9,6 +9,14 @@ from .parsers import parse_education, parse_experience, parse_skills
 
 from .. import structure
 
+REMOTE_LOCATION_HINTS = {
+    "remoto",
+    "remote",
+    "hibrido",
+    "híbrido",
+    "presencial",
+}
+
 
 def _strip_prefix(text: str, pattern) -> str:
     if not text:
@@ -124,6 +132,122 @@ def _map_skills(groups: list[dict]) -> list[dict]:
     return mapped
 
 
+def _split_org_with_inline_location(value: str) -> tuple[str, str]:
+    text = (value or "").strip()
+    if not text:
+        return "", ""
+    for sep in ("|", "·", "/", " - ", " – ", " — "):
+        if sep in text:
+            left, right = text.split(sep, 1)
+            left = left.strip()
+            right = right.strip()
+            if left and right:
+                return left, right
+    return text, ""
+
+
+def _map_extra_entries_from_experience(blocks: list[dict]) -> list[dict]:
+    entries: list[dict] = []
+    for block in blocks:
+        start, end = _map_date_range(block.get("date_range") or "")
+        where_raw = (block.get("org") or "").strip()
+        where, inline_location = _split_org_with_inline_location(where_raw)
+        where = where or where_raw
+
+        city, country = _map_location(block.get("location") or "")
+        if not city and inline_location:
+            city, country = _map_location(inline_location)
+            if not city and not country and inline_location.lower() in REMOTE_LOCATION_HINTS:
+                city = inline_location
+
+        technologies = _map_tech(block.get("meta_tech") or "")
+        items: list[str] = []
+        for item in block.get("items", []):
+            text = item.get("text") if isinstance(item, dict) else str(item)
+            if text and str(text).strip():
+                items.append(str(text).strip())
+        for extra in block.get("extra", []) or []:
+            if extra and str(extra).strip():
+                items.append(str(extra).strip())
+
+        entry = {
+            "subtitle": "",
+            "title": (block.get("role") or "").strip(),
+            "where": where.strip(),
+            "tech": technologies,
+            "start": start,
+            "end": end,
+            "city": city,
+            "country": country,
+            "items": items,
+        }
+        if any(entry.get(key) for key in ("title", "where", "tech", "start", "end", "city", "country")) or items:
+            entries.append(entry)
+    return entries
+
+
+def _is_detailed_extra_entry(entry: dict) -> bool:
+    return any((entry.get(key) or "").strip() for key in ("title", "where", "tech", "start", "end", "city", "country"))
+
+
+def _should_prefer_experience_extra(
+    title: str,
+    generic_entries: list[dict],
+    experience_entries: list[dict],
+) -> bool:
+    if not experience_entries:
+        return False
+
+    with_dates = sum(1 for entry in experience_entries if (entry.get("start") or entry.get("end")))
+    with_context = sum(
+        1
+        for entry in experience_entries
+        if (entry.get("where") or entry.get("title"))
+        and ((entry.get("start") or entry.get("end")) or (entry.get("items") or entry.get("tech")))
+    )
+    if with_dates == 0 or with_context == 0:
+        return False
+
+    generic_count = len(generic_entries)
+    title_upper = (title or "").upper()
+    is_project_like_title = "PROYECT" in title_upper
+
+    if is_project_like_title and generic_count > len(experience_entries):
+        return True
+
+    detailed_generic = sum(1 for entry in generic_entries if _is_detailed_extra_entry(entry))
+    if generic_count >= len(experience_entries) * 2:
+        return True
+    if detailed_generic == 0 and len(experience_entries) >= 1:
+        return True
+    if with_context >= 2 and (generic_count - len(experience_entries)) >= 2:
+        return True
+    return False
+
+
+def _parse_extra_section(title: str, raw_lines: list[dict], section_index: int) -> dict:
+    section_id = f"extra-{section_index}"
+    parsed_generic = structure._parse_extras([{"title": title, "lines": raw_lines}])
+    generic_section = (
+        parsed_generic[0]
+        if parsed_generic
+        else {"section_id": section_id, "title": title, "mode": "subtitle_items", "entries": []}
+    )
+    generic_section["section_id"] = section_id
+    generic_section["title"] = title
+
+    experience_entries = _map_extra_entries_from_experience(parse_experience(raw_lines))
+    if _should_prefer_experience_extra(title, generic_section.get("entries") or [], experience_entries):
+        return {
+            "section_id": section_id,
+            "title": title,
+            "mode": "detailed",
+            "entries": experience_entries,
+        }
+
+    return generic_section
+
+
 def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
     try:
         lines = extract_lines(file_obj)
@@ -163,7 +287,7 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
     contacts = [basics["email"], basics["phone"], basics["linkedin"], basics["github"]]
     basics["description"] = _infer_description(header_lines, basics["name"], header_location, contacts)
 
-    extras_raw: list[structure.ExtraSectionRaw] = []
+    parsed_extras: list[dict] = []
 
     for section in assembled["sections"]:
         title = section.get("title") or ""
@@ -181,10 +305,10 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
 
         extra_lines = [entry for entry in raw_lines if entry.get("text")]
         if extra_lines:
-            extras_raw.append({"title": title, "lines": extra_lines})
+            parsed_extras.append(_parse_extra_section(title, extra_lines, len(parsed_extras)))
 
-    if extras_raw:
-        data["extra_sections"] = structure._parse_extras(extras_raw)
+    if parsed_extras:
+        data["extra_sections"] = parsed_extras
 
     structure._ensure_minimums(data)
     return data, None
