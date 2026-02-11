@@ -5,6 +5,18 @@
 ![Status](https://img.shields.io/badge/Status-Portfolio%20Project-brightgreen)
 ![Type](https://img.shields.io/badge/App-Django%20Web%20Tool-purple)
 
+## 📸 Vista previa
+
+### 🔹 Pantalla de carga y detección de campos
+
+![Carga de CV y detección de campos](docs/img/preview-upload.png)
+
+### 🔹 Editor de CV estructurado
+
+![Editor de CV estructurado](docs/img/preview-editor.png)
+
+---
+
 **TrufaDocs** es una aplicación web construida con **Django** para procesar currículums de forma estructurada.  
 Permite importar CVs en `.docx` o `.pdf`, detectar automáticamente los campos, editarlos mediante formularios organizados y exportar el resultado a **DOCX** o **PDF**.
 
