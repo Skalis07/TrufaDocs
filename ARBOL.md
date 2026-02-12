@@ -8,7 +8,8 @@ Se omite el contenido interno de carpetas auto-generadas como `.venv`, `.ruff_ca
 |-- .ruff_cache/                     caché local de Ruff
 |-- .venv/                           entorno virtual local
 |-- docs/
-|   \-- img/                         imágenes usadas en el README
+|   |-- img/                         imágenes usadas en el README
+|   \-- DOCUMENTACION_TECNICA_COMPLETA.md
 |-- editor/                          app principal
 |   |-- pdf_parse/                   pipeline de parseo de PDF
 |   |   |-- __init__.py

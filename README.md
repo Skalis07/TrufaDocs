@@ -41,6 +41,14 @@ También funciona como práctica avanzada de backend con **Django**, manejo de a
 
 ---
 
+## 📚 Documentación técnica
+
+Para el detalle completo de arquitectura, componentes, flujo interno y decisiones de implementación, consultar:
+
+- [DOCUMENTACION_TECNICA_COMPLETA.md](docs/DOCUMENTACION_TECNICA_COMPLETA.md)
+
+---
+
 ## ✨ Características
 
 - 📄 **Importación de CVs** (`.docx` y `.pdf`)
