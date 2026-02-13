@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import unicodedata
 from typing import Iterable
 
 from .assemble import assemble_sections
@@ -16,6 +17,36 @@ REMOTE_LOCATION_HINTS = {
     "híbrido",
     "presencial",
 }
+
+EXPERIENCE_SECTION_TITLES = {
+    "EXPERIENCIA",
+    "EXPERIENCIA PROFESIONAL",
+    "EXPERIENCIA LABORAL",
+    "WORK EXPERIENCE",
+    "PROFESSIONAL EXPERIENCE",
+    "EXPERIENCE",
+}
+
+EDUCATION_SECTION_TITLES = {
+    "EDUCACION",
+    "FORMACION",
+    "EDUCATION",
+    "ACADEMIC BACKGROUND",
+}
+
+SKILLS_SECTION_TITLES = {
+    "HABILIDADES",
+    "SKILLS",
+    "COMPETENCIAS",
+    "TECHNICAL SKILLS",
+}
+
+
+def _normalize_section_title(value: str) -> str:
+    text = unicodedata.normalize("NFKD", (value or "").strip())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.replace(":", " ")
+    return " ".join(text.upper().split())
 
 
 def _strip_prefix(text: str, pattern) -> str:
@@ -198,22 +229,23 @@ def _should_prefer_experience_extra(
     if not experience_entries:
         return False
 
-    with_dates = sum(1 for entry in experience_entries if (entry.get("start") or entry.get("end")))
     with_context = sum(
         1
         for entry in experience_entries
         if (entry.get("where") or entry.get("title"))
         and ((entry.get("start") or entry.get("end")) or (entry.get("items") or entry.get("tech")))
     )
-    if with_dates == 0 or with_context == 0:
-        return False
 
     generic_count = len(generic_entries)
-    title_upper = (title or "").upper()
-    is_project_like_title = "PROYECT" in title_upper
+    normalized_title = _normalize_section_title(title)
+    is_project_like_title = "PROYECT" in normalized_title or "PROJECT" in normalized_title
 
-    if is_project_like_title and generic_count > len(experience_entries):
+    if is_project_like_title and with_context > 0 and generic_count > len(experience_entries):
         return True
+
+    with_dates = sum(1 for entry in experience_entries if (entry.get("start") or entry.get("end")))
+    if with_dates == 0 or with_context == 0:
+        return False
 
     detailed_generic = sum(1 for entry in generic_entries if _is_detailed_extra_entry(entry))
     if generic_count >= len(experience_entries) * 2:
@@ -288,27 +320,46 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
     basics["description"] = _infer_description(header_lines, basics["name"], header_location, contacts)
 
     parsed_extras: list[dict] = []
+    detected_order: list[str] = []
+    seen_core: set[str] = set()
+
+    def register_core(module_id: str) -> None:
+        if module_id in {"experience", "education", "skills"} and module_id not in seen_core:
+            detected_order.append(module_id)
+            seen_core.add(module_id)
 
     for section in assembled["sections"]:
         title = section.get("title") or ""
+        normalized_title = _normalize_section_title(title)
         raw_lines = section.get("raw") or []
 
-        if title in {"EXPERIENCIA", "EXPERIENCIA PROFESIONAL", "EXPERIENCIA LABORAL"}:
+        if normalized_title in EXPERIENCE_SECTION_TITLES:
             data["experience"].extend(_map_experience(parse_experience(raw_lines)))
+            register_core("experience")
             continue
-        if title in {"EDUCACIÓN", "EDUCACION"}:
+        if normalized_title in EDUCATION_SECTION_TITLES:
             data["education"].extend(_map_education(parse_education(raw_lines)))
+            register_core("education")
             continue
-        if title == "HABILIDADES":
+        if normalized_title in SKILLS_SECTION_TITLES:
             data["skills"].extend(_map_skills(parse_skills(raw_lines)))
+            register_core("skills")
             continue
 
         extra_lines = [entry for entry in raw_lines if entry.get("text")]
         if extra_lines:
-            parsed_extras.append(_parse_extra_section(title, extra_lines, len(parsed_extras)))
+            section_extra = _parse_extra_section(title, extra_lines, len(parsed_extras))
+            parsed_extras.append(section_extra)
+            section_id = (section_extra.get("section_id") or "").strip()
+            if section_id:
+                detected_order.append(section_id)
 
     if parsed_extras:
         data["extra_sections"] = parsed_extras
+    data.setdefault("meta", {})["core_order"] = structure._build_core_order_from_detected(
+        detected_order,
+        data.get("extra_sections") or [],
+    )
 
     structure._ensure_minimums(data)
     return data, None

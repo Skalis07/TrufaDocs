@@ -3,8 +3,453 @@
   const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
   const randomId = () => Math.random().toString(16).slice(2,10);
 
-  // Tema claro/oscuro con persistencia en localStorage
+  // Tema e idioma con persistencia en localStorage
   const root = document.documentElement;
+  const UI_LANG_STORAGE_KEY = "ui_lang";
+  const MONTH_LABELS = {
+    es: {
+      "01": "Ene",
+      "02": "Feb",
+      "03": "Mar",
+      "04": "Abr",
+      "05": "May",
+      "06": "Jun",
+      "07": "Jul",
+      "08": "Ago",
+      "09": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dic",
+    },
+    en: {
+      "01": "Jan",
+      "02": "Feb",
+      "03": "Mar",
+      "04": "Apr",
+      "05": "May",
+      "06": "Jun",
+      "07": "Jul",
+      "08": "Aug",
+      "09": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec",
+    },
+  };
+  const UI_TEXT = {
+    es: {
+      theme_to_light: "Cambiar a modo claro",
+      theme_to_dark: "Cambiar a modo nocturno",
+      help_about: "Sobre esta web",
+      help_pop_title: "TrufaDocs · Editor de CV profesional",
+      help_pop_body:
+        "Aplicación web para ayudarte a estructurar y editar tu CV con un formato limpio y consistente.",
+      hero_subtitle: "Detecta campos clave y exporta con un formato consistente.",
+      upload_hint: "Sube tu CV (.docx o .pdf) para detectar campos",
+      file_select_button: "Seleccionar archivo",
+      file_no_selection: "Sin archivos seleccionados",
+      file_required_error: "Selecciona un archivo .docx o .pdf.",
+      upload_or: "o",
+      detect_fields: "Detectar campos",
+      start_from_scratch: "Empezar desde cero",
+      section_document: "Documento",
+      section_basics: "Datos básicos",
+      label_source: "Fuente",
+      option_template_font: "Fuente de la plantilla",
+      label_name: "Nombre",
+      label_profile: "Descripción / Perfil",
+      label_email: "Correo",
+      label_phone: "Número",
+      label_linkedin: "LinkedIn",
+      label_github: "GitHub",
+      label_country: "País",
+      label_city: "Ciudad",
+      option_select_country: "Selecciona país",
+      month_placeholder: "Mes",
+      year_placeholder: "Año",
+      lang_toggle: "ES/EN",
+      lang_toggle_aria: "Cambiar idioma a inglés",
+      move_up: "Subir",
+      move_down: "Bajar",
+      add_action: "Agregar",
+      module_experience: "Experiencia",
+      module_education: "Educación",
+      module_skills: "Habilidades",
+      module_add_extra: "Agregar módulo extra",
+      module_extra_pill: "Extra",
+      untitled_module: "(sin título)",
+      repeat_experience: "Experiencia",
+      repeat_education: "Educación",
+      repeat_category: "Categoría",
+      repeat_entry: "Entrada",
+      action_delete: "Eliminar",
+      action_add_line: "Agregar línea",
+      action_add_experience: "Agregar experiencia",
+      action_add_education: "Agregar educación",
+      action_add_category: "Agregar categoría",
+      action_add_entry: "Agregar entrada",
+      action_export_docx: "Exportar DOCX",
+      action_export_pdf: "Exportar PDF",
+      label_role: "Rol",
+      label_company: "Empresa",
+      label_start_date: "Fecha inicio",
+      label_end_date: "Fecha fin",
+      label_detail_optional: "Detalle (opcional)",
+      label_highlights: "Hitos alcanzados (uno por línea)",
+      label_current_role: "Este es mi puesto actual",
+      label_degree: "Título",
+      label_institution: "Dónde",
+      label_in_progress: "En curso",
+      label_honors: "Honores",
+      label_subtitle: "Subtítulo",
+      label_items_optional: "Items (opcional)",
+      label_module_name: "Nombre de módulo",
+      label_module_type: "Tipo de módulo",
+      option_mode_subtitle_items: "Subtítulo+Items",
+      option_mode_detailed: "Detallado",
+      label_category_subtitle: "Categoría (subtítulo)",
+      label_company_project: "Empresa/Proyecto",
+      label_role_course: "Rol/Curso",
+      label_present: "Actualidad",
+      placeholder_one_item_per_line: "Un item por línea",
+    },
+    en: {
+      theme_to_light: "Switch to light mode",
+      theme_to_dark: "Switch to dark mode",
+      help_about: "About this website",
+      help_pop_title: "TrufaDocs · Professional CV editor",
+      help_pop_body:
+        "Web app to help you structure and edit your CV with a clean, consistent format.",
+      hero_subtitle: "Detect key fields and export with a consistent format.",
+      upload_hint: "Upload your CV (.docx or .pdf) to detect fields",
+      file_select_button: "Select file",
+      file_no_selection: "No file selected",
+      file_required_error: "Please select a .docx or .pdf file.",
+      upload_or: "or",
+      detect_fields: "Detect fields",
+      start_from_scratch: "Start from scratch",
+      section_document: "DOCUMENT",
+      section_basics: "BASIC INFO",
+      label_source: "Source",
+      option_template_font: "Template font",
+      label_name: "Name",
+      label_profile: "Summary / Profile",
+      label_email: "Email",
+      label_phone: "Phone",
+      label_linkedin: "LinkedIn",
+      label_github: "GitHub",
+      label_country: "Country",
+      label_city: "City",
+      option_select_country: "Select country",
+      month_placeholder: "Month",
+      year_placeholder: "Year",
+      lang_toggle: "EN/ES",
+      lang_toggle_aria: "Switch UI language to Spanish",
+      move_up: "Move up",
+      move_down: "Move down",
+      add_action: "Add",
+      module_experience: "PROFESSIONAL EXPERIENCE",
+      module_education: "EDUCATION",
+      module_skills: "SKILLS",
+      module_add_extra: "ADD EXTRA MODULE",
+      module_extra_pill: "EXTRA",
+      untitled_module: "(untitled)",
+      repeat_experience: "Experience",
+      repeat_education: "Education",
+      repeat_category: "Category",
+      repeat_entry: "Entry",
+      action_delete: "Delete",
+      action_add_line: "Add line",
+      action_add_experience: "Add experience",
+      action_add_education: "Add education",
+      action_add_category: "Add category",
+      action_add_entry: "Add entry",
+      action_export_docx: "Export DOCX",
+      action_export_pdf: "Export PDF",
+      label_role: "Role",
+      label_company: "Company",
+      label_start_date: "Start date",
+      label_end_date: "End date",
+      label_detail_optional: "Detail (optional)",
+      label_highlights: "Key achievements (one per line)",
+      label_current_role: "This is my current role",
+      label_degree: "Degree",
+      label_institution: "Institution",
+      label_in_progress: "In progress",
+      label_honors: "Honors",
+      label_subtitle: "Subtitle",
+      label_items_optional: "Items (optional)",
+      label_module_name: "Module name",
+      label_module_type: "Module type",
+      option_mode_subtitle_items: "Subtitle + Items",
+      option_mode_detailed: "Detailed",
+      label_category_subtitle: "Category (subtitle)",
+      label_company_project: "Company/Project",
+      label_role_course: "Role/Course",
+      label_present: "Present",
+      placeholder_one_item_per_line: "One item per line",
+    },
+  };
+
+  const storedLang = window.localStorage ? localStorage.getItem(UI_LANG_STORAGE_KEY) : "";
+  const initialLang = storedLang === "en" ? "en" : "es";
+  root.dataset.lang = initialLang;
+  root.lang = initialLang;
+
+  const getLang = () => (root.dataset.lang === "en" ? "en" : "es");
+  const t = (key) => {
+    const lang = getLang();
+    return (UI_TEXT[lang] && UI_TEXT[lang][key]) || UI_TEXT.es[key] || key;
+  };
+
+  const setTextBySelector = (selector, key, scope = document) => {
+    qsa(selector, scope).forEach((node) => {
+      node.textContent = t(key);
+    });
+  };
+
+  const setButtonTitleBySelector = (selector, key, scope = document) => {
+    qsa(selector, scope).forEach((button) => {
+      const title = t(key);
+      button.setAttribute("title", title);
+      button.setAttribute("aria-label", title);
+    });
+  };
+
+  const setFieldLabelByName = (name, key, scope = document) => {
+    qsa(`[name="${name}"]`, scope).forEach((fieldNode) => {
+      const field = fieldNode.closest(".field");
+      const label = field ? qs("label", field) : null;
+      if (label) label.textContent = t(key);
+    });
+  };
+
+  const setRepeatHeaderPrefix = (selector, key, scope = document) => {
+    qsa(selector, scope).forEach((labelNode) => {
+      const currentText = (labelNode.textContent || "").trim();
+      const match = currentText.match(/(\d+)$/);
+      const suffix = match ? ` ${match[1]}` : "";
+      labelNode.textContent = `${t(key)}${suffix}`;
+    });
+  };
+
+  const setCheckboxLabelText = (selector, key, scope = document) => {
+    qsa(selector, scope).forEach((labelNode) => {
+      const input = qs("input[data-role-current]", labelNode);
+      if (!input) return;
+      const newLabel = ` ${t(key)}`;
+      labelNode.replaceChildren(input, document.createTextNode(newLabel));
+    });
+  };
+
+  const setSectionHeadingByFieldName = (fieldName, key, scope = document) => {
+    qsa(`[name="${fieldName}"]`, scope).forEach((fieldNode) => {
+      const section = fieldNode.closest(".section");
+      const heading = section ? qs(".section-header h2", section) : null;
+      if (heading) heading.textContent = t(key);
+    });
+  };
+
+  const refreshFilePickerLabel = (picker) => {
+    const input = qs("[data-file-input]", picker);
+    const nameNode = qs("[data-file-picker-name]", picker);
+    if (!input || !nameNode) return;
+    const hasFile = Boolean(input.files && input.files.length > 0);
+    nameNode.textContent = hasFile ? input.files[0].name : t("file_no_selection");
+  };
+
+  const initFilePickers = (scope = document) => {
+    qsa("[data-file-picker]", scope).forEach((picker) => {
+      const input = qs("[data-file-input]", picker);
+      if (!input) return;
+      if (input.dataset.filePickerInit !== "1") {
+        input.dataset.filePickerInit = "1";
+        input.addEventListener("change", () => {
+          input.setCustomValidity("");
+          refreshFilePickerLabel(picker);
+        });
+        input.addEventListener("invalid", () => {
+          input.setCustomValidity(t("file_required_error"));
+        });
+      }
+      if (input.validity && input.validity.valueMissing && input.validationMessage) {
+        input.setCustomValidity(t("file_required_error"));
+      } else {
+        input.setCustomValidity("");
+      }
+      refreshFilePickerLabel(picker);
+    });
+  };
+
+  const setFixedUiTexts = (scope = document) => {
+    const helpToggle = qs(".help-toggle");
+    if (helpToggle) {
+      helpToggle.setAttribute("aria-label", t("help_about"));
+      helpToggle.setAttribute("title", t("help_about"));
+    }
+
+    setTextBySelector(".help-pop strong", "help_pop_title", scope);
+    setTextBySelector(".help-pop p", "help_pop_body", scope);
+    setTextBySelector(".hero-content > p", "hero_subtitle", scope);
+    setTextBySelector(".upload-panel label.file > span", "upload_hint", scope);
+    setTextBySelector("[data-file-picker-button]", "file_select_button", scope);
+    setTextBySelector(".upload-divider", "upload_or", scope);
+    setTextBySelector(".upload-detect-btn", "detect_fields", scope);
+    setTextBySelector(".upload-actions .ghost", "start_from_scratch", scope);
+
+    setSectionHeadingByFieldName("doc_font", "section_document", scope);
+    setSectionHeadingByFieldName("name", "section_basics", scope);
+    setFieldLabelByName("doc_font", "label_source", scope);
+    qsa('select[name="doc_font"]', scope).forEach((select) => {
+      const firstOption = select.querySelector('option[value=""]');
+      if (firstOption) firstOption.textContent = t("option_template_font");
+    });
+
+    setFieldLabelByName("name", "label_name", scope);
+    setFieldLabelByName("description", "label_profile", scope);
+    setFieldLabelByName("email", "label_email", scope);
+    setFieldLabelByName("phone", "label_phone", scope);
+    setFieldLabelByName("linkedin", "label_linkedin", scope);
+    setFieldLabelByName("github", "label_github", scope);
+    setFieldLabelByName("country", "label_country", scope);
+    setFieldLabelByName("city", "label_city", scope);
+
+    qsa("[data-country-select]", scope).forEach((select) => {
+      const firstOption = select.querySelector('option[value=""]');
+      if (firstOption) firstOption.textContent = t("option_select_country");
+    });
+
+    const experienceTitle = qs('.module-head[data-module-key="experience"] > h2');
+    if (experienceTitle) experienceTitle.textContent = t("module_experience");
+
+    const educationTitle = qs('.module-head[data-module-key="education"] > h2');
+    if (educationTitle) educationTitle.textContent = t("module_education");
+
+    const skillsTitle = qs('.module-head[data-module-key="skills"] > h2');
+    if (skillsTitle) skillsTitle.textContent = t("module_skills");
+
+    const addExtraTitle = qs("[data-add-module] .module-head h2");
+    if (addExtraTitle) addExtraTitle.textContent = t("module_add_extra");
+
+    setTextBySelector(".pill-extra", "module_extra_pill", scope);
+    qsa("[data-extra-section]", scope).forEach((sectionEl) => {
+      const titleInput = qs('[data-extra-title]', sectionEl);
+      const moduleBlock = sectionEl.closest(".module-block");
+      if (!moduleBlock) return;
+      const titleLabel = qs("[data-module-name]", moduleBlock);
+      if (!titleLabel) return;
+      if (!titleInput || !(titleInput.value || "").trim()) {
+        titleLabel.textContent = t("untitled_module");
+      }
+    });
+
+    setButtonTitleBySelector('[data-move="up"]', "move_up", scope);
+    setButtonTitleBySelector('[data-move="down"]', "move_down", scope);
+    setButtonTitleBySelector('[data-action="add-extra-module"]', "add_action", scope);
+
+    setRepeatHeaderPrefix("#experience-list .repeat-header > span", "repeat_experience", scope);
+    setRepeatHeaderPrefix("#education-list .repeat-header > span", "repeat_education", scope);
+    setRepeatHeaderPrefix("#skills-list .repeat-header > span", "repeat_category", scope);
+    setRepeatHeaderPrefix("[data-extra-entry] > .repeat-header > span", "repeat_entry", scope);
+
+    setTextBySelector("[data-remove]", "action_delete", scope);
+    setTextBySelector("[data-remove-highlight]", "action_delete", scope);
+    setTextBySelector('[data-action="remove-extra-section"]', "action_delete", scope);
+    setTextBySelector("[data-add-highlight]", "action_add_line", scope);
+    setTextBySelector('[data-add="experience"]', "action_add_experience", scope);
+    setTextBySelector('[data-add="education"]', "action_add_education", scope);
+    setTextBySelector('[data-add="skills"]', "action_add_category", scope);
+    setTextBySelector('[data-action="add-extra-entry"]', "action_add_entry", scope);
+    setTextBySelector(".btn-export-docx", "action_export_docx", scope);
+    setTextBySelector(".btn-export-pdf", "action_export_pdf", scope);
+
+    setFieldLabelByName("exp_role", "label_role", scope);
+    setFieldLabelByName("exp_company", "label_company", scope);
+    setFieldLabelByName("exp_start", "label_start_date", scope);
+    setFieldLabelByName("exp_end", "label_end_date", scope);
+    setFieldLabelByName("exp_country", "label_country", scope);
+    setFieldLabelByName("exp_city", "label_city", scope);
+    setFieldLabelByName("exp_tech", "label_detail_optional", scope);
+    setFieldLabelByName("exp_highlights", "label_highlights", scope);
+
+    setFieldLabelByName("edu_degree", "label_degree", scope);
+    setFieldLabelByName("edu_institution", "label_institution", scope);
+    setFieldLabelByName("edu_start", "label_start_date", scope);
+    setFieldLabelByName("edu_end", "label_end_date", scope);
+    setFieldLabelByName("edu_country", "label_country", scope);
+    setFieldLabelByName("edu_city", "label_city", scope);
+    setFieldLabelByName("edu_honors", "label_honors", scope);
+
+    setFieldLabelByName("skill_category", "label_subtitle", scope);
+    setFieldLabelByName("skill_items", "label_items_optional", scope);
+
+    setFieldLabelByName("extra_title", "label_module_name", scope);
+    setFieldLabelByName("extra_mode", "label_module_type", scope);
+    qsa('select[name="extra_mode"][data-extra-mode]', scope).forEach((select) => {
+      const subtitleItemsOption = select.querySelector('option[value="subtitle_items"]');
+      const detailedOption = select.querySelector('option[value="detailed"]');
+      if (subtitleItemsOption) {
+        subtitleItemsOption.textContent = t("option_mode_subtitle_items");
+      }
+      if (detailedOption) {
+        detailedOption.textContent = t("option_mode_detailed");
+      }
+    });
+
+    setFieldLabelByName("extra_entry_subtitle", "label_category_subtitle", scope);
+    setFieldLabelByName("extra_entry_where", "label_company_project", scope);
+    setFieldLabelByName("extra_entry_title", "label_role_course", scope);
+    setFieldLabelByName("extra_entry_tech", "label_detail_optional", scope);
+    setFieldLabelByName("extra_entry_country", "label_country", scope);
+    setFieldLabelByName("extra_entry_city", "label_city", scope);
+    setFieldLabelByName("extra_entry_start", "label_start_date", scope);
+    setFieldLabelByName("extra_entry_end", "label_end_date", scope);
+    setFieldLabelByName("extra_entry_items_detailed", "label_highlights", scope);
+    setFieldLabelByName("extra_entry_items_si", "label_items_optional", scope);
+
+    qsa('textarea[name="extra_entry_items_si"]', scope).forEach((textarea) => {
+      if (textarea.hasAttribute("placeholder")) {
+        textarea.setAttribute("placeholder", t("placeholder_one_item_per_line"));
+      }
+    });
+
+    setCheckboxLabelText("#experience-list .date-current", "label_current_role", scope);
+    setCheckboxLabelText("#education-list .date-current", "label_in_progress", scope);
+    setCheckboxLabelText("[data-extra-entry] .date-current", "label_present", scope);
+  };
+
+  const localizeDateSelectors = (scope = document) => {
+    const monthMap = MONTH_LABELS[getLang()] || MONTH_LABELS.es;
+    qsa("[data-month-select]", scope).forEach((select) => {
+      Array.from(select.options || []).forEach((option) => {
+        const value = (option.value || "").trim();
+        if (!value) {
+          option.textContent = t("month_placeholder");
+          return;
+        }
+        if (monthMap[value]) option.textContent = monthMap[value];
+      });
+    });
+    qsa("[data-year-select]", scope).forEach((select) => {
+      const firstOption = select.options && select.options.length ? select.options[0] : null;
+      if (firstOption && !firstOption.value) firstOption.textContent = t("year_placeholder");
+    });
+  };
+
+  const languageButtons = Array.from(
+    document.querySelectorAll("[data-lang-toggle]"),
+  );
+  const updateLanguageButtons = () => {
+    const isEnglish = getLang() === "en";
+    languageButtons.forEach((button) => {
+      const label = t("lang_toggle");
+      button.textContent = label;
+      button.setAttribute("aria-pressed", isEnglish ? "true" : "false");
+      button.setAttribute("aria-label", t("lang_toggle_aria"));
+      button.setAttribute("title", t("lang_toggle_aria"));
+    });
+  };
+
   const storedTheme = window.localStorage ? localStorage.getItem("theme") : "";
   const prefersDark =
     window.matchMedia &&
@@ -18,13 +463,28 @@
   const updateThemeButtons = () => {
     const isDark = root.dataset.theme === "dark";
     themeButtons.forEach((button) => {
-      const label = isDark ? "Cambiar a modo claro" : "Cambiar a modo nocturno";
+      const label = isDark ? t("theme_to_light") : t("theme_to_dark");
       button.setAttribute("aria-pressed", isDark ? "true" : "false");
       button.setAttribute("aria-label", label);
       button.setAttribute("title", label);
     });
   };
-  updateThemeButtons();
+
+  const updateUiLangInputs = () => {
+    const currentLang = getLang();
+    qsa("input[data-ui-lang-input]").forEach((input) => {
+      input.value = currentLang;
+    });
+  };
+
+  const applyUiLanguage = (scope = document) => {
+    updateUiLangInputs();
+    localizeDateSelectors(scope);
+    setFixedUiTexts(scope);
+    initFilePickers(scope);
+    updateLanguageButtons();
+    updateThemeButtons();
+  };
 
   themeButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -36,6 +496,20 @@
       updateThemeButtons();
     });
   });
+
+  languageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextLang = getLang() === "es" ? "en" : "es";
+      root.dataset.lang = nextLang;
+      root.lang = nextLang;
+      if (window.localStorage) {
+        localStorage.setItem(UI_LANG_STORAGE_KEY, nextLang);
+      }
+      applyUiLanguage(document);
+    });
+  });
+
+  applyUiLanguage(document);
 
   const addHandlers = [
     {
@@ -65,7 +539,7 @@
     remove.type = "button";
     remove.className = "ghost small";
     remove.dataset.removeHighlight = ""; // -> data-remove-highlight
-    remove.textContent = "Eliminar";
+    remove.textContent = t("action_delete");
 
     row.appendChild(input);
     row.appendChild(remove);
@@ -247,6 +721,7 @@
 
     syncExtraEntryMode(entry);
     initDateFields(entry);
+    applyUiLanguage(entry);
   };
 
   const initExtraSection = (section) => {
@@ -278,8 +753,8 @@
     const titleInput = section.querySelector('[data-extra-title]');
     const titleLabel = moduleBlock.querySelector('[data-module-name]');
     const syncTitle = () => {
-      const t = (titleInput?.value || "").trim();
-      if (titleLabel) titleLabel.textContent = t || "(sin título)";
+      const titleValue = (titleInput?.value || "").trim();
+      if (titleLabel) titleLabel.textContent = titleValue || t("untitled_module");
     };
     if (titleInput) {
       titleInput.addEventListener("input", syncTitle);
@@ -303,6 +778,7 @@
       items.forEach((entry) => initExtraEntry(entry, sectionId));
     }
     applyExtraMode(section);
+    applyUiLanguage(section);
 
     const addEntryBtn = section.querySelector('[data-action="add-extra-entry"]');
     if (addEntryBtn) {
@@ -313,6 +789,7 @@
         entriesRoot.appendChild(node);
         initExtraEntry(node, sectionId);
         applyExtraMode(section);
+        applyUiLanguage(section);
       });
     }
   };
@@ -387,6 +864,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
       .querySelectorAll("[data-highlight-block]")
       .forEach((block) => ensureHighlightRows(block));
     initDateFields(listEl);
+    applyUiLanguage(listEl);
   });
 });
   document
@@ -394,6 +872,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
     .forEach((block) => ensureHighlightRows(block));
   initDateFields();
   initExtraSections();
+  applyUiLanguage(document);
 
   // Cierra el dialogo de ayuda al hacer click fuera o con Escape
   const helpDialog = document.querySelector(".help");
@@ -545,6 +1024,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
 
     // Inicializar comportamiento extra + modos + fechas + reorder
     initExtraSection(node.querySelector("[data-extra-section]") || node);
+    applyUiLanguage(node);
     if (window.__trufadocs_reorder) window.__trufadocs_reorder.sync();
   });
 })();

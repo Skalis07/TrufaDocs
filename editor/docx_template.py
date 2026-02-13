@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+from contextvars import ContextVar
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, TypeAlias
@@ -16,21 +17,62 @@ from docx.text.run import Run
 DocxDocumentType: TypeAlias = Any
 ContactPart: TypeAlias = tuple[str, str, str | None, int]
 
-# Meses para formatear fechas (YYYY-MM -> Mes YYYY)
-MONTHS_REVERSE = {
-    "01": "Ene",
-    "02": "Feb",
-    "03": "Mar",
-    "04": "Abr",
-    "05": "May",
-    "06": "Jun",
-    "07": "Jul",
-    "08": "Ago",
-    "09": "Sep",
-    "10": "Oct",
-    "11": "Nov",
-    "12": "Dic",
+EXPORT_TEXT = {
+    "es": {
+        "heading_experience": "EXPERIENCIA",
+        "heading_education": "EDUCACIÓN",
+        "heading_skills": "HABILIDADES",
+        "present": "Actualidad",
+        "honors_prefix": "Honores",
+        "extra_section_prefix": "SECCION EXTRA",
+        "months": {
+            "01": "Ene",
+            "02": "Feb",
+            "03": "Mar",
+            "04": "Abr",
+            "05": "May",
+            "06": "Jun",
+            "07": "Jul",
+            "08": "Ago",
+            "09": "Sep",
+            "10": "Oct",
+            "11": "Nov",
+            "12": "Dic",
+        },
+    },
+    "en": {
+        "heading_experience": "PROFESSIONAL EXPERIENCE",
+        "heading_education": "EDUCATION",
+        "heading_skills": "SKILLS",
+        "present": "Present",
+        "honors_prefix": "Honors",
+        "extra_section_prefix": "EXTRA SECTION",
+        "months": {
+            "01": "Jan",
+            "02": "Feb",
+            "03": "Mar",
+            "04": "Apr",
+            "05": "May",
+            "06": "Jun",
+            "07": "Jul",
+            "08": "Aug",
+            "09": "Sep",
+            "10": "Oct",
+            "11": "Nov",
+            "12": "Dec",
+        },
+    },
 }
+
+_EXPORT_UI_LANG: ContextVar[str] = ContextVar("docx_export_ui_lang", default="es")
+
+
+def _normalize_ui_lang(value: str | None) -> str:
+    return "en" if str(value or "").strip().lower() == "en" else "es"
+
+
+def _export_text() -> dict[str, Any]:
+    return EXPORT_TEXT[_normalize_ui_lang(_EXPORT_UI_LANG.get())]
 
 
 def _format_detail_line(value: str | None) -> str:
@@ -57,79 +99,90 @@ def _entry_items_inline(entry: dict) -> str:
     return ", ".join(items)
 
 
-def render_from_template(structured: dict, template_path: Path, font_name: str | None = None) -> bytes:
+def render_from_template(
+    structured: dict,
+    template_path: Path,
+    font_name: str | None = None,
+    ui_lang: str | None = None,
+) -> bytes:
     # Carga la plantilla DOCX y reemplaza secciones con la data estructurada
-    doc = DocxDocument(str(template_path))
-    if not doc.tables:
-        raise ValueError("La plantilla no contiene tablas.")
+    lang_token = _EXPORT_UI_LANG.set(_normalize_ui_lang(ui_lang))
+    try:
+        doc = DocxDocument(str(template_path))
+        if not doc.tables:
+            raise ValueError("La plantilla no contiene tablas.")
 
-    table = doc.tables[0]
-    basics = structured.get("basics", {})
-    experience = structured.get("experience", []) or []
-    education = structured.get("education", []) or []
-    skills = structured.get("skills", []) or []
-    extras = structured.get("extra_sections", []) or []
+        table = doc.tables[0]
+        basics = structured.get("basics", {})
+        experience = structured.get("experience", []) or []
+        education = structured.get("education", []) or []
+        skills = structured.get("skills", []) or []
+        extras = structured.get("extra_sections", []) or []
 
-    exp_header_idx = _find_row_index(table, "experiencia")
-    edu_header_idx = _find_row_index(table, "educación")
-    skills_header_idx = _find_row_index(table, "habilidades")
-    if exp_header_idx is None or edu_header_idx is None or skills_header_idx is None:
-        raise ValueError("No se encontraron secciones clave en la plantilla.")
+        exp_header_idx = _find_row_index(table, "experiencia")
+        edu_header_idx = _find_row_index(table, "educación")
+        skills_header_idx = _find_row_index(table, "habilidades")
+        if exp_header_idx is None or edu_header_idx is None or skills_header_idx is None:
+            raise ValueError("No se encontraron secciones clave en la plantilla.")
 
-    contact_row_idx = _find_row_index_predicate(
-        table,
-        lambda text: "linkedin" in text or "github" in text or "@" in text,
-    )
-    name_row_idx = _find_first_non_empty_before(table, contact_row_idx or exp_header_idx)
-    summary_row_idx = _find_next_non_empty_row(table, (contact_row_idx or 0) + 1, exp_header_idx)
+        contact_row_idx = _find_row_index_predicate(
+            table,
+            lambda text: "linkedin" in text or "github" in text or "@" in text,
+        )
+        name_row_idx = _find_first_non_empty_before(table, contact_row_idx or exp_header_idx)
+        summary_row_idx = _find_next_non_empty_row(table, (contact_row_idx or 0) + 1, exp_header_idx)
 
-    if name_row_idx is not None:
-        _set_row_text(table.rows[name_row_idx], basics.get("name", "").strip())
+        if name_row_idx is not None:
+            _set_row_text(table.rows[name_row_idx], basics.get("name", "").strip())
 
-    if contact_row_idx is not None:
-        _set_contact_row(table.rows[contact_row_idx], basics)
+        if contact_row_idx is not None:
+            _set_contact_row(table.rows[contact_row_idx], basics)
 
-    if summary_row_idx is not None:
-        _set_row_text(table.rows[summary_row_idx], basics.get("description", "").strip())
+        if summary_row_idx is not None:
+            _set_row_text(table.rows[summary_row_idx], basics.get("description", "").strip())
 
-    # Experiencia y educacion se escriben en bloques con filas clonadas
-    _set_row_keep_with_next(table.rows[exp_header_idx])
-    _set_row_keep_with_next(table.rows[edu_header_idx])
-    _apply_section_keep_with_next_gap(table, exp_header_idx)
-    _apply_experience(table, exp_header_idx, edu_header_idx, experience)
+        # Experiencia y educacion se escriben en bloques con filas clonadas
+        _set_row_keep_with_next(table.rows[exp_header_idx])
+        _set_row_keep_with_next(table.rows[edu_header_idx])
+        _apply_section_keep_with_next_gap(table, exp_header_idx)
+        _apply_experience(table, exp_header_idx, edu_header_idx, experience)
 
-    edu_header_idx = _find_row_index(table, "educación")
-    skills_header_idx = _find_row_index(table, "habilidades")
-    if edu_header_idx is None or skills_header_idx is None:
-        raise ValueError("No se encontraron secciones clave en la plantilla.")
+        edu_header_idx = _find_row_index(table, "educación")
+        skills_header_idx = _find_row_index(table, "habilidades")
+        if edu_header_idx is None or skills_header_idx is None:
+            raise ValueError("No se encontraron secciones clave en la plantilla.")
 
-    _set_row_keep_with_next(table.rows[edu_header_idx])
-    _set_row_keep_with_next(table.rows[skills_header_idx])
-    _apply_section_keep_with_next_gap(table, edu_header_idx)
-    _apply_education(table, edu_header_idx, skills_header_idx, education)
+        _set_row_keep_with_next(table.rows[edu_header_idx])
+        _set_row_keep_with_next(table.rows[skills_header_idx])
+        _apply_section_keep_with_next_gap(table, edu_header_idx)
+        _apply_education(table, edu_header_idx, skills_header_idx, education)
 
-    skills_header_idx = _find_row_index(table, "habilidades")
-    if skills_header_idx is None:
-        raise ValueError("No se encontro la seccion de habilidades en la plantilla.")
+        skills_header_idx = _find_row_index(table, "habilidades")
+        if skills_header_idx is None:
+            raise ValueError("No se encontro la seccion de habilidades en la plantilla.")
 
-    _set_row_keep_with_next(table.rows[skills_header_idx])
-    _apply_section_keep_with_next_gap(table, skills_header_idx)
-    skills_content_idx = _apply_skills(table, skills_header_idx, skills)
+        _set_row_keep_with_next(table.rows[skills_header_idx])
+        _apply_section_keep_with_next_gap(table, skills_header_idx)
+        skills_content_idx = _apply_skills(table, skills_header_idx, skills)
 
-    # Extras se agregan despues de habilidades (ahora soporta modo por entrada)
-    extra_blocks = _apply_extras(table, skills_header_idx, skills_content_idx, extras)
+        # Extras se agregan despues de habilidades (ahora soporta modo por entrada)
+        extra_blocks = _apply_extras(table, skills_header_idx, skills_content_idx, extras)
 
-    # Fuerza tamaño de bullets en habilidades
-    _normalize_skills_bullets(doc, table, skills_content_idx, size_pt=11)
-    # Reordena módulos según core_order enviado por la UI (flechas)
-    _apply_module_order(table, structured, extra_blocks)
-    # Aplica fuente global si el usuario la selecciono
-    _apply_font(doc, font_name)
-    _collapse_blank_rows(table)
+        # Fuerza tamaño de bullets en habilidades
+        _normalize_skills_bullets(doc, table, skills_content_idx, size_pt=11)
+        # Reordena módulos según core_order enviado por la UI (flechas)
+        _apply_module_order(table, structured, extra_blocks)
+        # Traduce encabezados de módulos core para export final.
+        _localize_core_headings(table)
+        # Aplica fuente global si el usuario la selecciono
+        _apply_font(doc, font_name)
+        _collapse_blank_rows(table)
 
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    return buffer.getvalue()
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        return buffer.getvalue()
+    finally:
+        _EXPORT_UI_LANG.reset(lang_token)
 
 
 def _apply_experience(table, exp_header_idx: int, edu_header_idx: int, experience: list[dict]) -> None:
@@ -278,30 +331,40 @@ def _apply_skills(table, skills_header_idx: int, skills: list[dict]) -> int | No
     for idx, item in enumerate(filtered):
         category = (item.get("category") or "").strip()
         items = (item.get("items") or "").strip()
+        category_paragraph = None
         if category:
-            _add_paragraph(
+            category_paragraph = _add_paragraph(
                 cell,
                 category,
                 style=template_style,
                 run_template=category_template.runs[0] if category_template is not None and category_template.runs else None,
                 paragraph_template=category_template,
             )
+            # Por defecto no encadenar categorías, para evitar mover todo
+            # el bloque de habilidades a la página siguiente.
+            category_paragraph.paragraph_format.keep_with_next = False
         if items:
-            _add_paragraph(
+            items_paragraph = _add_paragraph(
                 cell,
                 items,
                 style=template_style,
                 run_template=items_template.runs[0] if items_template is not None and items_template.runs else None,
                 paragraph_template=items_template,
             )
+            items_paragraph.paragraph_format.keep_with_next = False
+            if category_paragraph is not None:
+                # Encadena subtitulo + items solo desde la segunda categoría.
+                # Así evitamos "huérfanos" sin empujar todo el módulo.
+                category_paragraph.paragraph_format.keep_with_next = idx > 0
         if idx < len(filtered) - 1:
-            _add_paragraph(
+            spacer_paragraph = _add_paragraph(
                 cell,
                 "",
                 style=template_style,
                 run_template=spacer_template.runs[0] if spacer_template is not None and spacer_template.runs else None,
                 paragraph_template=spacer_template,
             )
+            spacer_paragraph.paragraph_format.keep_with_next = False
 
     return skills_content_idx
 
@@ -399,23 +462,6 @@ def _extra_entry_has_content(entry: dict) -> bool:
     return any(item for item in (entry.get("items") or []) if str(item).strip())
 
 
-def _flatten_extra_lines(extra: dict) -> list[str]:
-    """Convierte una extra-section a lista de líneas (fallback/compatibilidad).
-
-    - Si viene con el formato antiguo (title/items) devuelve items.
-    - Si viene con entries, usa mode por entrada (o el mode de la sección como default).
-    """
-    if "entries" not in extra:
-        return [item for item in (extra.get("items") or []) if item and str(item).strip()]
-
-    default_mode = _normalize_extra_mode(extra.get("mode"), default="subtitles")
-    lines: list[str] = []
-    for entry in extra.get("entries") or []:
-        entry_mode = _normalize_extra_mode(entry.get("mode"), default=default_mode)
-        lines.extend(_extra_entry_lines(entry, mode=entry_mode))
-    return [line for line in lines if line and str(line).strip()]
-
-
 def _apply_extras(
     table,
     skills_header_idx: int,
@@ -436,7 +482,7 @@ def _apply_extras(
         raw_title = (extra.get("title") or "").strip()
         # Si el usuario deja el título vacío, forzamos un fallback para
         # preservar límites de sección al reimportar desde PDF.
-        title = raw_title or f"SECCION EXTRA {extra_idx}"
+        title = raw_title or f"{_export_text()['extra_section_prefix']} {extra_idx}"
         section_mode = (extra.get("mode") or "subtitles").strip() or "subtitles"
         section_mode = _normalize_extra_mode(section_mode, default="subtitles")
         entries = [entry for entry in (extra.get("entries") or []) if _extra_entry_has_content(entry)]
@@ -780,7 +826,7 @@ def _fill_education_row(row, item: dict) -> None:
     institution = (item.get("institution") or "").strip()
     degree = (item.get("degree") or "").strip()
     honors = (item.get("honors") or "").strip()
-    honors_line = f"Honores: {honors}" if honors else ""
+    honors_line = f"{_export_text()['honors_prefix']}: {honors}" if honors else ""
     left_lines = _filter_empty_lines([institution, degree, honors_line])
     _set_cell_lines_preserve(left, left_lines, trim_extra_paragraphs=True)
 
@@ -919,7 +965,7 @@ def _format_date_range(start: str | None, end: str | None) -> str:
     if start and end:
         return f"{start}–{end}"
     if start and not end:
-        return f"{start}–Actualidad"
+        return f"{start}–{_export_text()['present']}"
     if end and not start:
         return end
     return ""
@@ -931,7 +977,7 @@ def _format_date_token(value: str | None) -> str:
         return ""
     match = re.match(r"^(?P<year>\d{4})-(?P<month>\d{2})$", value)
     if match:
-        month = MONTHS_REVERSE.get(match.group("month"), match.group("month"))
+        month = _export_text()["months"].get(match.group("month"), match.group("month"))
         return f"{month} {match.group('year')}"
     return value
 
@@ -1091,7 +1137,7 @@ def _add_paragraph(
     style=None,
     run_template=None,
     paragraph_template=None,
-) -> None:
+):
     paragraph = cell.add_paragraph()
     if paragraph_template is not None:
         _clone_paragraph_format(paragraph_template, paragraph)
@@ -1101,6 +1147,7 @@ def _add_paragraph(
     _clone_run_format(run_template, run)
     if bold is not None:
         run.bold = bold
+    return paragraph
 
 
 def _filter_empty_lines(lines: list[str]) -> list[str]:
@@ -1296,6 +1343,33 @@ def _find_row_index(table, marker: str) -> int | None:
         if target in row_text.lower() and _row_is_heading(row_text):
             return idx
     return None
+
+
+def _find_heading_row_index(table, module_key: str) -> int | None:
+    markers_by_module = {
+        "experience": ["experiencia", "professional experience", "experience"],
+        "education": ["educación", "educacion", "education"],
+        "skills": ["habilidades", "skills"],
+    }
+    for marker in markers_by_module.get(module_key, []):
+        idx = _find_row_index(table, marker)
+        if idx is not None:
+            return idx
+    return None
+
+
+def _localize_core_headings(table) -> None:
+    labels = _export_text()
+    heading_keys = {
+        "experience": "heading_experience",
+        "education": "heading_education",
+        "skills": "heading_skills",
+    }
+    for module_key, text_key in heading_keys.items():
+        idx = _find_heading_row_index(table, module_key)
+        if idx is None:
+            continue
+        _set_row_text(table.rows[idx], labels[text_key])
 
 
 def _find_row_index_predicate(table, predicate) -> int | None:

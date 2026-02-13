@@ -60,6 +60,15 @@
                   </svg>
                 </span>
               </button>
+              <button
+                type="button"
+                class="theme-toggle lang-toggle"
+                data-lang-toggle
+                aria-label="Cambiar idioma a inglés"
+                title="Cambiar idioma a inglés"
+              >
+                ES / EN
+              </button>
             </div>
           </div>
           <h1>TrufaDocs</h1>
@@ -76,9 +85,14 @@
         <form method="post" action="{% url 'text_upload' %}" enctype="multipart/form-data" class="stack upload-stack">
           {% csrf_token %}
           <input type="hidden" name="core_order" id="upload-core-order" value="{{ structured.meta.core_order|default:'experience,education,skills' }}">
+          <input type="hidden" name="ui_lang" value="{{ ui_lang|default:'es' }}" data-ui-lang-input>
           <label class="file">
             <span>Sube tu CV (.docx o .pdf) para detectar campos</span>
-            <input type="file" name="file" accept=".docx,.pdf" required />
+            <div class="file-picker" data-file-picker>
+              <span class="file-picker-button" data-file-picker-button>Seleccionar archivo</span>
+              <span class="file-picker-name" data-file-picker-name>Sin archivos seleccionados</span>
+              <input type="file" name="file" accept=".docx,.pdf" required data-file-input />
+            </div>
           </label>
           <button type="submit" class="primary upload-detect-btn">Detectar campos</button>
         </form>
@@ -93,6 +107,7 @@
         <form method="post" class="stack" id="structured-form">
           <input type="hidden" name="core_order" id="core-order" value="{{ structured.meta.core_order|default:'experience,education,skills' }}">
           <input type="hidden" name="module_order_map" id="module-order-map" value="">
+          <input type="hidden" name="ui_lang" value="{{ ui_lang|default:'es' }}" data-ui-lang-input>
           {% csrf_token %}
           <input type="hidden" name="filename" value="{{ filename|default:'document' }}" />
 

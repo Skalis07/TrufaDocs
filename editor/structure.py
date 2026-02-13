@@ -77,6 +77,51 @@ def default_structure() -> Dict:
     }
 
 
+def _build_core_order_from_detected(
+    detected_order: List[str],
+    extra_sections: List[Dict],
+) -> str:
+    """Construye core_order preservando el orden detectado en import.
+
+    - Mantiene módulos core en el orden observado (experience/education/skills).
+    - Inserta extras (`extra-*`) en su posición observada.
+    - Completa módulos faltantes al final para mantener compatibilidad.
+    """
+    default_core = ["experience", "education", "skills"]
+    extra_ids = [
+        (section.get("section_id") or "").strip()
+        for section in (extra_sections or [])
+        if (section.get("section_id") or "").strip()
+    ]
+    known_ids = set(default_core + extra_ids)
+
+    ordered: List[str] = []
+    seen: set[str] = set()
+
+    for token in detected_order or []:
+        module_id = (token or "").strip()
+        if not module_id:
+            continue
+        if module_id not in known_ids:
+            continue
+        if module_id in seen:
+            continue
+        ordered.append(module_id)
+        seen.add(module_id)
+
+    for module_id in default_core:
+        if module_id not in seen:
+            ordered.append(module_id)
+            seen.add(module_id)
+
+    for extra_id in extra_ids:
+        if extra_id not in seen:
+            ordered.append(extra_id)
+            seen.add(extra_id)
+
+    return ",".join(ordered) if ordered else ",".join(default_core)
+
+
 # Entrada principal del parser: texto -> estructura
 def parse_resume(text: str) -> Dict:
     data = default_structure()
@@ -91,11 +136,15 @@ def parse_resume(text: str) -> Dict:
     data["basics"]["city"] = city
     data["basics"]["country"] = country
 
-    sections, extras = _split_sections(remaining)
+    sections, extras, detected_order = _split_sections(remaining)
     data["experience"] = _parse_experience(sections.get("experience", []))
     data["education"] = _parse_education(sections.get("education", []))
     data["skills"] = _parse_skills(sections.get("skills", []))
     data["extra_sections"] = _parse_extras(extras)
+    data.setdefault("meta", {})["core_order"] = _build_core_order_from_detected(
+        detected_order,
+        data["extra_sections"],
+    )
 
     _ensure_minimums(data)
     return data
@@ -789,11 +838,23 @@ def _extract_location(text: str, lines: List[str], contact: Dict[str, str]) -> T
 # Separacion de secciones
 # --------------------
 
-def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraSectionRaw]]:
+def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraSectionRaw], List[str]]:
     sections: Dict[str, List[str]] = {"experience": [], "education": [], "skills": []}
     extras: List[ExtraSectionRaw] = []
     current_section = "other"
     current_extra: Optional[ExtraSectionRaw] = None
+    detected_order: List[str] = []
+    seen_core: set[str] = set()
+
+    def register_core(module_id: str) -> None:
+        if module_id in {"experience", "education", "skills"} and module_id not in seen_core:
+            detected_order.append(module_id)
+            seen_core.add(module_id)
+
+    def register_extra(section_index: int) -> None:
+        # El section_id real se asigna luego (_parse_extras), pero conservamos
+        # posición relativa para mapearlo como extra-{idx}.
+        detected_order.append(f"extra-{section_index}")
 
     for line in lines:
         if not line:
@@ -807,6 +868,7 @@ def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraS
             current_section = "extra"
             current_extra = {"title": _normalize_heading_line(line).strip().rstrip(":"), "lines": []}
             extras.append(current_extra)
+            register_extra(len(extras) - 1)
             continue
 
         key, title = _match_heading(line)
@@ -819,9 +881,11 @@ def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraS
                 current_section = "extra"
                 current_extra = {"title": title, "lines": []}
                 extras.append(current_extra)
+                register_extra(len(extras) - 1)
             else:
                 current_section = key
                 current_extra = None
+                register_core(key)
             continue
 
         if current_section in sections:
@@ -829,7 +893,7 @@ def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraS
         elif current_section == "extra" and current_extra is not None:
             current_extra["lines"].append(line)
 
-    return sections, extras
+    return sections, extras, detected_order
 
 
 # --------------------

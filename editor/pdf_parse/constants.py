@@ -2,15 +2,23 @@ from __future__ import annotations
 
 import re
 
-MONTHS_ES = r"(Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)"
-YEAR = r"(19|20)\d{2}"
+MONTH_TOKEN = (
+    r"(?:"
+    r"Ene(?:ro)?|Feb(?:rero)?|Mar(?:zo)?|Abr(?:il)?|May(?:o)?|Jun(?:io)?|"
+    r"Jul(?:io)?|Ago(?:sto)?|Sep(?:tiembre)?|Oct(?:ubre)?|Nov(?:iembre)?|Dic(?:iembre)?|"
+    r"Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?"
+    r")"
+)
+YEAR = r"(?:19|20)\d{2}"
 
 DATE_RANGE_RE = re.compile(
-    rf"\b{MONTHS_ES}\s+{YEAR}\s*(?:[-–—]|a|hasta)\s*{MONTHS_ES}\s+{YEAR}\b"
+    rf"\b{MONTH_TOKEN}\s+{YEAR}\s*(?:[-–—]|a|to|hasta)\s*{MONTH_TOKEN}\s+{YEAR}\b",
+    re.IGNORECASE,
 )
 
 DATE_RANGE_OPEN_RE = re.compile(
-    rf"\b{MONTHS_ES}\s+{YEAR}\s*(?:[-–—]|a|hasta)\s*(Presente|Actualidad|Hoy)\b",
+    rf"\b{MONTH_TOKEN}\s+{YEAR}\s*(?:[-–—]|a|to|hasta)\s*(Presente|Actualidad|Hoy|Current|Present)\b",
     re.IGNORECASE,
 )
 
@@ -20,7 +28,7 @@ URL_RE = re.compile(r"\bhttps?://\S+|\bwww\.\S+", re.IGNORECASE)
 
 BULLET_CHARS = ("●", "•", "◦", "-", "–", "—", "·")
 TECH_PREFIX_RE = re.compile(r"^\s*Tecnolog[ií]as\s*:\s*", re.IGNORECASE)
-HONORS_PREFIX_RE = re.compile(r"^\s*Honores\s*:\s*", re.IGNORECASE)
+HONORS_PREFIX_RE = re.compile(r"^\s*(?:Honores?|Honors?|Honours?)\s*:\s*", re.IGNORECASE)
 
 KNOWN_SECTION_TITLES = {
     "EXPERIENCIA",

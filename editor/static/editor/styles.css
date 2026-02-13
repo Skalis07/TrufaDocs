@@ -415,7 +415,8 @@ body::after {
   margin-bottom: 0;
 }
 
-.theme-toggle {
+.theme-toggle,
+.lang-toggle {
   width: 40px;
   height: 40px;
   padding: 0;
@@ -430,18 +431,32 @@ body::after {
   transition: transform 140ms ease, box-shadow 140ms ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.lang-toggle:hover {
   transform: translateY(-2px);
 }
 
-.theme-toggle:active {
+.theme-toggle:active,
+.lang-toggle:active {
   transform: translateY(-1px) scale(0.98);
 }
 
-:root[data-theme="dark"] .theme-toggle {
+:root[data-theme="dark"] .theme-toggle,
+:root[data-theme="dark"] .lang-toggle {
   background: #121821;
   color: var(--primary);
   border-color: #2f3944;
+}
+
+.lang-toggle {
+  width: auto;
+  min-width: 66px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .theme-icon {
@@ -696,39 +711,72 @@ p {
   font-weight: 700;
 }
 
-.file input {
+.file-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 12px;
   border-radius: 12px;
   border: 1px dashed var(--stroke);
   background: #f8efe3;
+  min-height: 50px;
 }
 
-.file input::file-selector-button,
-.file input::-webkit-file-upload-button {
-  margin-right: 12px;
-  border: none;
+.file-picker:focus-within {
+  outline: 2px solid rgba(24, 177, 153, 0.35);
+  outline-offset: 2px;
+}
+
+.file-picker-button {
+  display: inline-flex;
+  align-items: center;
   border-radius: 10px;
   padding: 8px 12px;
   background: var(--primary);
   color: #ffffff;
   font-weight: 700;
-  cursor: pointer;
+  line-height: 1;
+  pointer-events: none;
 }
 
-:root[data-theme="dark"] .file input::file-selector-button,
-:root[data-theme="dark"] .file input::-webkit-file-upload-button {
-  background: var(--primary);
-  color: #0b1517;
+.file-picker-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #5b5147;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
 }
 
 :root[data-theme="dark"] .file {
   color: var(--ink);
 }
 
-:root[data-theme="dark"] .file input {
+:root[data-theme="dark"] .file-picker {
   background: #182029;
   border-color: #2f3944;
-  color: var(--ink);
+}
+
+:root[data-theme="dark"] .file-picker-button {
+  background: var(--primary);
+  color: #0b1517;
+}
+
+:root[data-theme="dark"] .file-picker-name {
+  color: #d2dde8;
 }
 
 /* Botones */

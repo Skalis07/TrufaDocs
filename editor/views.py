@@ -46,6 +46,104 @@ COUNTRY_CHOICES = [
     "Venezuela",
 ]
 
+UI_MESSAGES = {
+    "es": {
+        "upload_select_file": "Selecciona un archivo .docx o .pdf.",
+        "upload_file_too_large": "El archivo supera {max_mb} MB.",
+        "upload_unsupported_format": "Formato no soportado. Usa .docx o .pdf.",
+        "upload_extract_text_failed": "No se pudo extraer texto del archivo.",
+        "export_template_not_found": "No se encontro una plantilla DOCX valida para exportar.",
+        "export_docx_template_failed": "No se pudo generar el DOCX desde la plantilla: {detail}",
+        "export_docx_template_failed_generic": "No se pudo generar el DOCX desde la plantilla.",
+        "export_pdf_failed": "No se pudo generar el PDF.",
+        "unknown_error": "error desconocido.",
+        "docx_empty": "El archivo DOCX esta vacio.",
+        "docx_read_failed": "No se pudo leer el DOCX: {detail}",
+        "docx_read_xml_failed": "No se pudo leer el DOCX (XML): {detail}",
+        "docx_no_text": "No se encontro texto legible dentro del DOCX.",
+        "pdf_read_failed": "No se pudo leer el PDF: {detail}",
+        "pdf_no_text": "No se pudo extraer texto del PDF.",
+        "docx2pdf_not_installed": "docx2pdf no esta instalado. Ejecuta pip install -r requirements.txt.",
+        "docx2pdf_convert_failed_detail": "docx2pdf fallo al convertir: {detail}",
+        "docx2pdf_convert_failed_word": "docx2pdf fallo al convertir. Asegura que Microsoft Word este instalado.",
+        "docx2pdf_output_missing": "docx2pdf no genero el PDF esperado. Verifica Microsoft Word.",
+    },
+    "en": {
+        "upload_select_file": "Please select a .docx or .pdf file.",
+        "upload_file_too_large": "The file exceeds {max_mb} MB.",
+        "upload_unsupported_format": "Unsupported format. Use .docx or .pdf.",
+        "upload_extract_text_failed": "Could not extract text from the file.",
+        "export_template_not_found": "No valid DOCX template was found for export.",
+        "export_docx_template_failed": "Could not generate the DOCX from the template: {detail}",
+        "export_docx_template_failed_generic": "Could not generate the DOCX from the template.",
+        "export_pdf_failed": "Could not generate the PDF.",
+        "unknown_error": "unknown error.",
+        "docx_empty": "The DOCX file is empty.",
+        "docx_read_failed": "Could not read the DOCX: {detail}",
+        "docx_read_xml_failed": "Could not read the DOCX (XML): {detail}",
+        "docx_no_text": "No readable text was found inside the DOCX.",
+        "pdf_read_failed": "Could not read the PDF: {detail}",
+        "pdf_no_text": "Could not extract text from the PDF.",
+        "docx2pdf_not_installed": "docx2pdf is not installed. Run pip install -r requirements.txt.",
+        "docx2pdf_convert_failed_detail": "docx2pdf failed to convert: {detail}",
+        "docx2pdf_convert_failed_word": "docx2pdf failed to convert. Make sure Microsoft Word is installed.",
+        "docx2pdf_output_missing": "docx2pdf did not generate the expected PDF. Check Microsoft Word.",
+    },
+}
+
+
+def _ui_lang(request) -> str:
+    raw = ""
+    if getattr(request, "method", "") == "POST":
+        raw = request.POST.get("ui_lang", "")
+    if not raw:
+        raw = request.GET.get("ui_lang", "")
+    return "en" if str(raw).strip().lower() == "en" else "es"
+
+
+def _msg(request, key: str, **kwargs) -> str:
+    lang = _ui_lang(request)
+    template = UI_MESSAGES.get(lang, UI_MESSAGES["es"]).get(key) or UI_MESSAGES["es"].get(key) or key
+    if not kwargs:
+        return template
+    try:
+        return template.format(**kwargs)
+    except Exception:
+        return template
+
+
+def _translate_backend_error(request, message: str | None) -> str | None:
+    if not message:
+        return message
+    text = str(message).strip()
+    if not text:
+        return text
+
+    exact_map = {
+        "El archivo DOCX esta vacio.": "docx_empty",
+        "No se encontro texto legible dentro del DOCX.": "docx_no_text",
+        "No se pudo extraer texto del PDF.": "pdf_no_text",
+        "docx2pdf no esta instalado. Ejecuta pip install -r requirements.txt.": "docx2pdf_not_installed",
+        "docx2pdf fallo al convertir. Asegura que Microsoft Word este instalado.": "docx2pdf_convert_failed_word",
+        "docx2pdf no genero el PDF esperado. Verifica Microsoft Word.": "docx2pdf_output_missing",
+    }
+    mapped_key = exact_map.get(text)
+    if mapped_key:
+        return _msg(request, mapped_key)
+
+    prefix_map = [
+        ("No se pudo leer el DOCX: ", "docx_read_failed"),
+        ("No se pudo leer el DOCX (XML): ", "docx_read_xml_failed"),
+        ("No se pudo leer el PDF: ", "pdf_read_failed"),
+        ("docx2pdf fallo al convertir: ", "docx2pdf_convert_failed_detail"),
+    ]
+    for prefix, key in prefix_map:
+        if text.startswith(prefix):
+            detail = text[len(prefix) :].strip() or _msg(request, "unknown_error")
+            return _msg(request, key, detail=detail)
+
+    return text
+
 def _extract_structured_countries(structured: dict | None) -> list[str]:
     # Recoge paises desde la estructura para que se muestren en el selector.
     countries: list[str] = []
@@ -102,27 +200,27 @@ def text_upload(request):
 
     uploaded = request.FILES.get("file")
     if not uploaded:
-        return _text_error(request, "Selecciona un archivo .docx o .pdf.")
+        return _text_error(request, _msg(request, "upload_select_file"))
 
     max_mb = _max_upload_mb()
     if uploaded.size > max_mb * 1024 * 1024:
-        return _text_error(request, f"El archivo supera {max_mb} MB.")
+        return _text_error(request, _msg(request, "upload_file_too_large", max_mb=max_mb))
 
     if not _is_allowed_extension(uploaded.name):
-        return _text_error(request, "Formato no soportado. Usa .docx o .pdf.")
+        return _text_error(request, _msg(request, "upload_unsupported_format"))
 
     ext = _extension(uploaded.name)
     if ext == ".docx":
         text, error = _extract_docx_text(uploaded)
         if error:
-            return _text_error(request, error)
+            return _text_error(request, _translate_backend_error(request, error) or error)
         if not text.strip():
-            return _text_error(request, "No se pudo extraer texto del archivo.")
+            return _text_error(request, _msg(request, "upload_extract_text_failed"))
         structured = parse_resume(text)
     else:
         structured, error = parse_pdf_to_structure(uploaded)
         if error:
-            return _text_error(request, error)
+            return _text_error(request, _translate_backend_error(request, error) or error)
 
     filename = _safe_filename(uploaded.name)
     return _render_text_editor(request, structured, filename=filename)
@@ -142,10 +240,15 @@ def export_docx(request):
                 request,
                 structured,
                 filename=_safe_filename(request.POST.get("filename", "documento")),
-                error="No se encontro una plantilla DOCX valida para exportar.",
+                error=_msg(request, "export_template_not_found"),
             )
         try:
-            rendered = render_from_template(structured, template_path, font_name=font_choice)
+            rendered = render_from_template(
+                structured,
+                template_path,
+                font_name=font_choice,
+                ui_lang=_ui_lang(request),
+            )
         except Exception as exc:
             detail = str(exc).strip()
             if len(detail) > 400:
@@ -154,7 +257,11 @@ def export_docx(request):
                 request,
                 structured,
                 filename=_safe_filename(request.POST.get("filename", "documento")),
-                error=f"No se pudo generar el DOCX desde la plantilla: {detail or 'error desconocido.'}",
+                error=_msg(
+                    request,
+                    "export_docx_template_failed",
+                    detail=detail or _msg(request, "unknown_error"),
+                ),
             )
         filename = _safe_filename(request.POST.get("filename", "documento"))
         response = HttpResponse(
@@ -194,10 +301,15 @@ def export_pdf(request):
                 request,
                 structured,
                 filename=filename,
-                error="No se encontro una plantilla DOCX valida para exportar.",
+                error=_msg(request, "export_template_not_found"),
             )
         try:
-            rendered_docx = render_from_template(structured, template_path, font_name=font_choice)
+            rendered_docx = render_from_template(
+                structured,
+                template_path,
+                font_name=font_choice,
+                ui_lang=_ui_lang(request),
+            )
         except Exception:
             rendered_docx = None
         if not rendered_docx:
@@ -205,7 +317,7 @@ def export_pdf(request):
                 request,
                 structured,
                 filename=filename,
-                error="No se pudo generar el DOCX desde la plantilla.",
+                error=_msg(request, "export_docx_template_failed_generic"),
             )
         docx_bytes = rendered_docx
     else:
@@ -222,7 +334,7 @@ def export_pdf(request):
         request,
         structured,
         filename=filename,
-        error=error or "No se pudo generar el PDF.",
+        error=_translate_backend_error(request, error) or _msg(request, "export_pdf_failed"),
     )
 
 
@@ -244,6 +356,7 @@ def _render_text_editor(request, structured, filename="documento", error: str | 
             "filename": filename,
             "structured": structured,
             "error": error,
+            "ui_lang": _ui_lang(request),
             "font_choices": FONT_CHOICES,
             "selected_font": font_choice,
             "country_choices": country_choices,

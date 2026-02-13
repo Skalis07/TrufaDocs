@@ -23,12 +23,12 @@ def _line(
 class PdfExtraSectionParsingTests(SimpleTestCase):
     def test_project_like_extra_prefers_experience_shape(self) -> None:
         raw_lines = [
-            _line("Nolia-Office | Remoto", is_bold=True),
+            _line("Example Labs | Remoto", is_bold=True),
             _line("Desarrollador | Nov 2025 – Ene 2026"),
             _line("Astro, TypeScript, Tailwind, Vercel, Docker"),
             _line("Desarrollé una web app embebible en Notion.", indent=14, is_bullet=True),
             _line("Implementé enfoque en UX con modo día/noche.", indent=14, is_bullet=True),
-            _line("TrufaDocs | Remoto", is_bold=True),
+            _line("Acme Platform | Remoto", is_bold=True),
             _line("Desarrollador | Ene 2026 – Feb 2026"),
             _line("Python, Django, JavaScript, CSS, HTML"),
             _line("Construí pipeline de parsing para CVs.", indent=14, is_bullet=True),
@@ -39,7 +39,7 @@ class PdfExtraSectionParsingTests(SimpleTestCase):
 
         self.assertEqual(section.get("mode"), "detailed")
         self.assertEqual(len(entries), 2)
-        self.assertEqual(entries[0].get("where"), "Nolia-Office")
+        self.assertEqual(entries[0].get("where"), "Example Labs")
         self.assertEqual(entries[0].get("title"), "Desarrollador")
         self.assertEqual(entries[0].get("start"), "2025-11")
         self.assertEqual(entries[0].get("end"), "2026-01")
@@ -59,3 +59,27 @@ class PdfExtraSectionParsingTests(SimpleTestCase):
         self.assertEqual(len(entries), 2)
         self.assertEqual(entries[0].get("subtitle"), "AWS Cloud Practitioner")
         self.assertEqual(entries[1].get("subtitle"), "Scrum Fundamentals Certified")
+
+    def test_projects_title_in_english_prefers_experience_shape(self) -> None:
+        raw_lines = [
+            _line("Example Labs | Remote", is_bold=True),
+            _line("Developer | Nov 2025 – Jan 2026"),
+            _line("Astro, TypeScript, Tailwind, Vercel, Docker"),
+            _line("Built a production-ready Notion widget.", indent=14, is_bullet=True),
+            _line("Acme Platform | Remote", is_bold=True),
+            _line("Developer | Jan 2026 – Feb 2026"),
+            _line("Python, Django, JavaScript, CSS, HTML"),
+            _line("Implemented DOCX/PDF parsing pipeline.", indent=14, is_bullet=True),
+        ]
+
+        section = _parse_extra_section("PROJECTS", raw_lines, 2)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "detailed")
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0].get("start"), "2025-11")
+        self.assertEqual(entries[0].get("end"), "2026-01")
+        self.assertEqual(entries[1].get("start"), "2026-01")
+        self.assertEqual(entries[1].get("end"), "2026-02")
+        self.assertGreaterEqual(len(entries[0].get("items") or []), 1)
+        self.assertGreaterEqual(len(entries[1].get("items") or []), 1)

@@ -12,6 +12,10 @@ from .constants import (
 from .extract import calc_comma_density, normalize_spaces
 
 LOCATION_TRAILING_RE = re.compile(r"(Viña del Mar|Santiago),\s*Chile$", re.IGNORECASE)
+HONOR_HINT_RE = re.compile(
+    r"\b(?:honores?|honors?|honours?|cum\s+laude|distinction|distinci[oó]n|menci[oó]n)\b",
+    re.IGNORECASE,
+)
 
 
 def _strip_trailing_bullet(text: str) -> str:
@@ -51,7 +55,9 @@ def _extract_date_from_line(text: str) -> tuple[str, str]:
     date_range = match.group(0)
     remainder = text.replace(date_range, "")
     remainder = re.sub(r"\s*\|\s*", " ", remainder)
-    remainder = normalize_spaces(remainder.strip(" -–—()"))
+    remainder = normalize_spaces(remainder.strip(" -–—"))
+    if remainder.startswith("(") and remainder.endswith(")"):
+        remainder = remainder[1:-1].strip()
     return date_range, remainder
 
 
@@ -80,6 +86,15 @@ def _looks_like_new_org(line: str) -> bool:
     if len(line) > 65:
         return False
     return True
+
+
+def _looks_like_honor_line(text: str) -> bool:
+    normalized = normalize_spaces(text or "")
+    if not normalized:
+        return False
+    if HONORS_PREFIX_RE.match(normalized):
+        return True
+    return bool(HONOR_HINT_RE.search(normalized))
 
 
 def parse_experience(raw_lines: list[dict]) -> list[dict]:
@@ -230,7 +245,7 @@ def parse_education(raw_lines: list[dict]) -> list[dict]:
         if not text:
             continue
 
-        is_honor = bool(HONORS_PREFIX_RE.match(text))
+        is_honor = _looks_like_honor_line(text)
         date_range, remainder = _extract_date_from_line(text)
         is_date = bool(date_range)
 
