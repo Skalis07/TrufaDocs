@@ -27,7 +27,14 @@ Se omite el contenido interno de carpetas auto-generadas como `.venv`, `.ruff_ca
 |   |   \-- editor.html
 |   |-- tests/
 |   |   |-- __init__.py
-|   |   \-- test_structure_from_post.py
+|   |   |-- test_docx_template_localization.py
+|   |   |-- test_docx_template_module_order.py
+|   |   |-- test_docx_template_skills_pagination.py
+|   |   |-- test_import_module_order.py
+|   |   |-- test_pdf_english_dates_honors.py
+|   |   |-- test_pdf_extra_section_parsing.py
+|   |   |-- test_structure_from_post.py
+|   |   \-- test_view_localization.py
 |   |-- __init__.py
 |   |-- apps.py
 |   |-- docx_template.py
@@ -49,7 +56,7 @@ Se omite el contenido interno de carpetas auto-generadas como `.venv`, `.ruff_ca
 |-- .env                             variables locales (no subir)
 |-- .env.example                     ejemplo de variables de entorno
 |-- .gitignore
-|-- arbol.md
+|-- ARBOL.md
 |-- manage.py
 |-- README.md
 \-- requirements.txt
@@ -67,6 +74,6 @@ Se omite el contenido interno de carpetas auto-generadas como `.venv`, `.ruff_ca
 - `editor/templates/editor/editor.html`: interfaz principal del formulario.
 - `editor/static/editor/editor.js`: lógica frontend (módulos, fechas, orden interno).
 - `editor/static/editor/styles.css`: estilos de la interfaz.
-- `editor/tests/test_structure_from_post.py`: cobertura base del procesamiento estructurado.
+- `editor/tests/*`: cobertura de procesamiento estructurado, parseo PDF EN/ES, orden de módulos, localización de UI y export DOCX.
 - `templates/cv_template.docx`: plantilla DOCX utilizada para exportar.
 - `docs/img/*`: capturas de pantalla usadas en el README.

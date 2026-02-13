@@ -20,6 +20,8 @@
 **TrufaDocs** es una aplicación web construida con **Django** para procesar currículums de forma estructurada.  
 Permite importar CVs en `.docx` o `.pdf`, detectar automáticamente los campos, editarlos mediante formularios organizados y exportar el resultado a **DOCX** o **PDF**.
 
+Incluye UI bilingüe (**ES/EN**) con cambio en tiempo real, exportación localizada de títulos core y preservación del orden de módulos detectado al importar.
+
 La exportación se basa en una plantilla Word ubicada en:
 
 ```
@@ -52,7 +54,10 @@ Para el detalle completo de arquitectura, componentes, flujo interno y decisione
 ## ✨ Características
 
 - 📄 **Importación de CVs** (`.docx` y `.pdf`)
+- 🌐 **Interfaz ES/EN** con botón de cambio de idioma y persistencia en `localStorage`
 - 🧠 **Detección heurística de campos**
+- 🧭 **Preservación de orden de módulos** al importar (incluye módulos extra entre secciones core)
+- 🗓️ **Fechas y honores ES/EN** en parseo PDF (`Jan/Feb/...`, `Present`, `Honors/Honours`)
 - 📝 **Formulario estructurado** para edición manual
 - 🧩 Separación por secciones:
   - Datos básicos
@@ -62,6 +67,7 @@ Para el detalle completo de arquitectura, componentes, flujo interno y decisione
   - Extras
 - 🧾 **Exportación a DOCX** usando plantilla
 - 🖨️ **Exportación a PDF** mediante Word + `docx2pdf`
+- 🔤 **Exportación localizada** de encabezados core (`EXPERIENCIA` / `PROFESSIONAL EXPERIENCE`, etc.)
 - 🧪 Redirecciones y validaciones para evitar errores de flujo
 
 ---
@@ -129,9 +135,10 @@ http://127.0.0.1:8000/
 ## 🔄 Flujo de uso
 
 1. Subir un CV desde el panel principal.
-2. Presionar **Detectar campos**.
-3. Revisar y ajustar los datos en el formulario.
-4. Exportar usando:
+2. (Opcional) Cambiar idioma con el botón **ES/EN**.
+3. Presionar **Detectar campos**.
+4. Revisar y ajustar los datos en el formulario.
+5. Exportar usando:
    - **Exportar DOCX**
    - **Exportar PDF**
 
@@ -193,6 +200,15 @@ Toda la información se mantiene en memoria durante la sesión.
 python manage.py test
 ```
 
+Suites clave agregadas para estos cambios:
+
+```bash
+python manage.py test editor.tests.test_view_localization
+python manage.py test editor.tests.test_docx_template_localization
+python manage.py test editor.tests.test_import_module_order
+python manage.py test editor.tests.test_pdf_english_dates_honors
+```
+
 ---
 
 ## ⚠️ Limitaciones conocidas
@@ -208,7 +224,7 @@ python manage.py test
 Consultar:
 
 ```
-arbol.md
+ARBOL.md
 ```
 
 para ver el árbol actualizado del repositorio.

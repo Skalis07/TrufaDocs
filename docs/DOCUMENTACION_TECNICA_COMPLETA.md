@@ -21,10 +21,54 @@
 - `FONT_CHOICES`: lista de fuentes disponibles para exportar en UI.
 - `CURRENT_YEAR` y `YEAR_CHOICES`: generan lista de años para selectores (desde año actual + 5 hacia 1970).
 - `COUNTRY_CHOICES`: lista mínima viable de países para selector (base).
+- `UI_MESSAGES`: diccionario de mensajes ES/EN para errores de upload/parsing/export.
 
 Estas constantes se usan en:
 - validación de uploads (`_is_allowed_extension`, `text_upload`)
 - render del template con selects (`_render_text_editor`)
+- traducción de errores backend (`_msg`, `_translate_backend_error`)
+
+---
+
+### Función: `_ui_lang(request) -> str`
+**Qué hace:**  
+Determina el idioma de UI activo (`"es"` o `"en"`).
+
+**Reglas:**
+1) Si request es `POST`, prioriza `request.POST["ui_lang"]`.
+2) Si viene vacío, usa `request.GET["ui_lang"]`.
+3) Solo acepta `"en"` explícito; cualquier otro valor cae a `"es"`.
+
+**Retorno:**
+- `"en"` o `"es"`.
+
+---
+
+### Función: `_msg(request, key: str, **kwargs) -> str`
+**Qué hace:**  
+Resuelve un mensaje localizado desde `UI_MESSAGES`.
+
+**Reglas:**
+1) Detecta idioma con `_ui_lang(request)`.
+2) Busca `key` en el idioma actual; fallback a español; fallback final al `key`.
+3) Si hay `kwargs`, intenta `template.format(**kwargs)`; si falla, retorna el template sin romper.
+
+**Retorno:**
+- string final listo para mostrar en UI.
+
+---
+
+### Función: `_translate_backend_error(request, message: str | None) -> str | None`
+**Qué hace:**  
+Traduce mensajes de error backend “legados” (emitidos en español por helpers de parsing/conversión) al idioma UI actual.
+
+**Estrategia:**
+- `exact_map`: mapea mensajes exactos a claves de `UI_MESSAGES`.
+- `prefix_map`: mapea prefijos con detalle variable (ej. `"No se pudo leer el PDF: ..."`), preservando el detalle.
+- Si no encuentra mapeo, devuelve el mensaje original.
+
+**Retorno:**
+- mensaje localizado o mensaje original.
 
 ---
 
@@ -121,12 +165,12 @@ Recibe un archivo subido, valida formato/tamaño, extrae texto o estructura, y r
 5) Decide pipeline según extensión:
    - Si `.docx`:
      - `text, error = _extract_docx_text(uploaded)`
-     - si `error` => `_text_error(error)`
+     - si `error` => `_text_error(_translate_backend_error(...))`
      - si `text` vacío => `_text_error("No se pudo extraer texto...")`
      - `structured = parse_resume(text)` (parse heurístico desde texto)
    - Si `.pdf`:
      - `structured, error = parse_pdf_to_structure(uploaded)`
-     - si `error` => `_text_error(error)`
+     - si `error` => `_text_error(_translate_backend_error(...))`
 6) Calcula nombre base de archivo para UI:
    - `filename = _safe_filename(uploaded.name)`
 7) Renderiza editor con `_render_text_editor(request, structured, filename)`
@@ -155,8 +199,9 @@ Exporta un DOCX, ya sea:
    - `structured = structure_from_post(request.POST)` (reconstruye dict desde el form)
    - `template_path = _template_path()` (busca docx plantilla)
    - `font_choice = _selected_font(request)` (valida fuente)
+   - `ui_lang = _ui_lang(request)` (idioma activo para export localizado)
    - si no hay plantilla => render editor con error (mantiene estructura)
-   - intenta `render_from_template(structured, template_path, font_name=font_choice)`:
+   - intenta `render_from_template(structured, template_path, font_name=font_choice, ui_lang=ui_lang)`:
      - si falla => captura excepción, recorta detalle a 400 chars, render error
    - si OK => arma `HttpResponse` con bytes DOCX y header de descarga
 3) Si NO `use_structured`:
@@ -183,8 +228,9 @@ Exporta PDF en dos modos:
    - `structured = structure_from_post(...)`
    - `template_path = _template_path()`
    - `font_choice = _selected_font(request)`
+   - `ui_lang = _ui_lang(request)`
    - si no hay plantilla => render con error
-   - intenta `render_from_template(...)`:
+   - intenta `render_from_template(..., ui_lang=ui_lang)`:
      - si falla => `rendered_docx = None`
    - si no hay `rendered_docx` => render con error
    - `docx_bytes = rendered_docx`
@@ -215,15 +261,17 @@ Renderiza `editor/editor.html` con el contexto completo que necesita la UI.
 - `filename`: base name para export
 - `structured`: dict de estructura para poblar el formulario
 - `error`: mensaje de error para mostrar (si existe)
+- `ui_lang`: idioma de la UI (`es`/`en`) para sincronizar front/back
 - `font_choices` y `selected_font`
 - `country_choices`: merge de base + detectados desde estructura
 - `year_choices`: lista de años para selects
 
 **Flujo:**
 1) Obtiene `font_choice` desde `_selected_font(request)`
-2) Extrae países desde estructura (`_extract_structured_countries`)
-3) Combina con base (`_merge_country_choices`)
-4) `render(request, "editor/editor.html", context)`
+2) Obtiene `ui_lang` con `_ui_lang(request)`
+3) Extrae países desde estructura (`_extract_structured_countries`)
+4) Combina con base (`_merge_country_choices`)
+5) `render(request, "editor/editor.html", context)`
 
 **Retorno:**
 - `HttpResponse` (template render).
@@ -923,6 +971,23 @@ Devuelve el “shape” base de datos que usan:
 
 ---
 
+### Función: `_build_core_order_from_detected(detected_order: List[str], extra_sections: List[Dict]) -> str`
+**Qué hace:**  
+Construye `meta.core_order` preservando el orden detectado al importar.
+
+**Reglas:**
+1) Parte de módulos core conocidos: `experience`, `education`, `skills`.
+2) Agrega IDs reales de extras (`extra-*`) presentes en `extra_sections`.
+3) Recorre `detected_order` y conserva solo IDs conocidos, sin duplicados.
+4) Completa módulos core faltantes al final.
+5) Completa extras faltantes al final.
+6) Si no detecta nada válido, fallback a `"experience,education,skills"`.
+
+**Retorno:**
+- string CSV con orden final estable.
+
+---
+
 ## 2) Entrada principal del parser
 
 ### Función: `parse_resume(text: str) -> Dict`
@@ -956,18 +1021,21 @@ Convierte texto crudo de CV (ya extraído de PDF/DOCX) en una estructura dict li
    - `city, country = _extract_location(text, lines, contact)`
    - actualiza `data["basics"]["city"]`, `["country"]`
 6) separación de secciones:
-   - `sections, extras = _split_sections(remaining)`
+   - `sections, extras, detected_order = _split_sections(remaining)`
    - `sections`: dict con listas de líneas por sección core
    - `extras`: lista de secciones extra crudas
+   - `detected_order`: orden observado de módulos (core + extras) en texto importado
 7) parseo por sección:
    - `data["experience"] = _parse_experience(sections.get("experience", []))`
    - `data["education"] = _parse_education(sections.get("education", []))`
    - `data["skills"] = _parse_skills(sections.get("skills", []))`
 8) extras:
    - `data["extra_sections"] = _parse_extras(extras)`
-9) mínimos:
+9) orden core final:
+   - `data["meta"]["core_order"] = _build_core_order_from_detected(detected_order, data["extra_sections"])`
+10) mínimos:
    - `_ensure_minimums(data)`
-10) retorna `data`.
+11) retorna `data`.
 
 **Parámetros:**
 - `text`: texto completo del CV, como string.
@@ -2141,6 +2209,91 @@ Convierte secciones extra crudas (title + lines) en secciones estructuradas para
 
 ---
 
+# Fuente: pdf_parse_bridge_parsers_detailed_docs.md
+
+# pdf_parse (bridge/constants/parsers) — Cambios y funciones clave
+
+> Este bloque cubre la capa de importación PDF estructurada (`editor/pdf_parse/*`), enfocada en:
+> - robustez EN/ES para fechas y honores
+> - reconocimiento de títulos core en español e inglés
+> - preservación del orden detectado de módulos (`meta.core_order`)
+
+---
+
+## Archivo: `pdf_parse/constants.py`
+
+### `MONTH_TOKEN`
+- Incluye meses ES y EN (abreviados y completos): `Ene/Enero ... Dic/Diciembre`, `Jan/January ... Dec/December`.
+
+### `DATE_RANGE_RE`
+- Soporta rangos con conectores:
+  - guiones (`-`, `–`, `—`)
+  - `a`, `hasta` (ES)
+  - `to` (EN)
+
+### `DATE_RANGE_OPEN_RE`
+- Soporta rangos abiertos con:
+  - `Presente`, `Actualidad`, `Hoy`
+  - `Current`, `Present`
+
+### `HONORS_PREFIX_RE`
+- Reconoce prefijos de honores en ES/EN:
+  - `Honores:`
+  - `Honors:`
+  - `Honours:`
+
+---
+
+## Archivo: `pdf_parse/parsers.py`
+
+### `HONOR_HINT_RE` + `_looks_like_honor_line(text: str) -> bool`
+**Qué resuelve:**  
+Detección más confiable de líneas de honores aunque no vengan con prefijo explícito.
+
+**Ejemplos detectados:**
+- `"Honors: Magna Cum Laude"`
+- `"With distinction"`
+- `"Mención honorífica"`
+
+### `_extract_date_from_line(text: str) -> tuple[str, str]`
+**Ajuste importante:**  
+Después de extraer el rango de fecha, limpia separadores sin truncar texto válido de cierre (evita recortes indebidos en líneas con `)`).
+
+### `parse_education(raw_lines: list[dict]) -> list[dict]`
+**Ajuste importante:**  
+Usa `_looks_like_honor_line` para clasificar `honors`, mejorando CVs EN donde el honor no siempre viene como `Honores:`.
+
+---
+
+## Archivo: `pdf_parse/bridge.py`
+
+### Sets de títulos core EN/ES
+- `EXPERIENCE_SECTION_TITLES` reconoce: `EXPERIENCIA`, `EXPERIENCIA PROFESIONAL`, `WORK EXPERIENCE`, `PROFESSIONAL EXPERIENCE`, etc.
+- `EDUCATION_SECTION_TITLES` reconoce: `EDUCACION`, `FORMACION`, `EDUCATION`, `ACADEMIC BACKGROUND`.
+- `SKILLS_SECTION_TITLES` reconoce: `HABILIDADES`, `SKILLS`, `COMPETENCIAS`, `TECHNICAL SKILLS`.
+
+### `_parse_extra_section(title, raw_lines, section_index) -> dict`
+**Qué hace:**  
+Parsea una sección extra y decide entre:
+- modo genérico (`subtitle_items`) vía `structure._parse_extras`
+- modo `detailed` derivado de `parse_experience` cuando hay mejor contexto (fechas/where/items).
+
+### `parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]`
+**Flujo actualizado (resumen):**
+1) extrae líneas (`extract_lines`) y arma secciones (`assemble_sections`).
+2) mapea header a `basics` (nombre, contacto, links, ubicación, descripción inferida).
+3) clasifica cada sección por título normalizado (core EN/ES o extra).
+4) parsea core con `parse_experience/parse_education/parse_skills`.
+5) parsea extras con `_parse_extra_section`.
+6) reconstruye orden real detectado (`detected_order`) y lo consolida en:
+   - `data["meta"]["core_order"] = structure._build_core_order_from_detected(...)`
+7) garantiza mínimos con `structure._ensure_minimums(data)`.
+
+**Resultado clave:**  
+El orden de módulos importado se conserva para el editor y para la exportación posterior.
+
+---
+
 # Fuente: docx_template_detailed_docs.md
 
 # docx_template.py — Documentación detallada (por función)
@@ -2169,12 +2322,22 @@ Representa un “fragmento” dentro de la línea de contacto:
 - url: destino del link (o `None` si no es link)
 - size_pt: tamaño de fuente que se desea aplicar
 
-### `MONTHS_REVERSE`
-Mapeo `"MM" -> "Mes"` usado por `_format_date_token()` para transformar `"YYYY-MM"` en `"Mes YYYY"`.
+### `EXPORT_TEXT` + `_EXPORT_UI_LANG`
+- `EXPORT_TEXT`: catálogo ES/EN para export (headings core, meses, etiqueta de presente, prefijo de honores y fallback de título extra).
+- `_EXPORT_UI_LANG`: `ContextVar` que mantiene el idioma del render DOCX durante toda la ejecución.
 
 ---
 
 ## Helpers de normalización simple
+
+### `_normalize_ui_lang(value: str | None) -> str`
+- Normaliza idioma de export:
+  - `"en"` => `"en"`
+  - cualquier otro valor => `"es"`
+
+### `_export_text() -> dict[str, Any]`
+- Devuelve el bloque de `EXPORT_TEXT` según `_EXPORT_UI_LANG`.
+- Centraliza textos localizados para todos los helpers de render.
 
 ### `_format_detail_line(value: str | None) -> str`
 - Limpia `value` con `.strip()`.
@@ -2201,7 +2364,7 @@ Impacto: evita que la UI o CVs viejos rompan el export.
 
 ## Punto de entrada principal
 
-### `render_from_template(structured: dict, template_path: Path, font_name: str | None = None) -> bytes`
+### `render_from_template(structured: dict, template_path: Path, font_name: str | None = None, ui_lang: str | None = None) -> bytes`
 **Qué hace:** genera un `.docx` final (bytes) usando una plantilla.
 
 Flujo (alto nivel, en orden):
@@ -2234,10 +2397,11 @@ Flujo (alto nivel, en orden):
    - `extra_blocks = _apply_extras(...)`
    - Retorna “bloques” de filas insertadas por extra para reordenarlas después.
 13. Ajuste fino:
-   - `_normalize_skills_bullets(...)`: fuerza tamaño del numerado/bullets en skills.
-   - `_apply_module_order(...)`: reordena módulos según `meta.core_order`.
-   - `_apply_font(...)`: aplica fuente global elegida por el usuario.
-   - `_collapse_blank_rows(...)`: elimina dobles filas en blanco consecutivas sin bordes.
+    - `_normalize_skills_bullets(...)`: fuerza tamaño del numerado/bullets en skills.
+    - `_apply_module_order(...)`: reordena módulos según `meta.core_order`.
+    - `_localize_core_headings(...)`: traduce EXPERIENCE/EDUCATION/SKILLS según `ui_lang`.
+    - `_apply_font(...)`: aplica fuente global elegida por el usuario.
+    - `_collapse_blank_rows(...)`: elimina dobles filas en blanco consecutivas sin bordes.
 14. Guarda a `BytesIO` y retorna `buffer.getvalue()`.
 
 **Errores típicos controlados:**
@@ -2354,11 +2518,6 @@ Helper de fallback/compatibilidad: transforma una `entry` en “líneas” impri
 ### `_extra_entry_has_content(entry: dict) -> bool`
 Chequea si una entry tiene algún campo con contenido real o items no vacíos.
 
-### `_flatten_extra_lines(extra: dict) -> list[str]`
-Convierte una sección extra completa en lista de líneas:
-- Si viene en formato antiguo con `items`, devuelve items.
-- Si viene con `entries`, usa `entry.mode` (o `extra.mode` como default) y llama `_extra_entry_lines`.
-
 ### `_apply_extras(table, skills_header_idx: int, skills_content_idx: int | None, extras: list[dict]) -> list[dict[str, Any]]`
 Inserta secciones extra debajo de habilidades.
 
@@ -2371,7 +2530,7 @@ Características clave:
 Flujo:
 1. Si no hay `skills_content_idx` o no hay extras => `[]`.
 2. Filtra/normaliza secciones:
-   - Define `title` fallback si viene vacío (“SECCION EXTRA N”) para conservar límites al reimportar PDF.
+   - Define `title` fallback localizado (`SECCION EXTRA N` / `EXTRA SECTION N`) para conservar límites al reimportar PDF.
    - Normaliza `section_mode`.
    - Filtra entries con `_extra_entry_has_content`.
    - Normaliza `entry["mode"]` (fallback a `section_mode`).
@@ -2443,7 +2602,7 @@ Rellena la fila de highlights (1 col):
 
 ### `_fill_education_row(row, item: dict) -> None`
 Rellena educación (2 col):
-- Izq: institution, degree, “Honores: ...” si existe
+- Izq: institution, degree, `"{honors_prefix}: ..."` localizado (ES/EN) si existe
 - Der: location, date_range
 
 ### `_fill_extra_detail_role_row(row, entry: dict) -> None`
@@ -2504,12 +2663,12 @@ Inserta hyperlink “real” en OOXML:
 - Convierte tokens con `_format_date_token()`.
 - Formatos:
   - start y end: `"start–end"`
-  - start y sin end: `"start–Actualidad"`
+  - start y sin end: `"start–present"` localizado (`Actualidad` / `Present`)
   - end solo: `"end"`
   - ninguno: `""`
 
 ### `_format_date_token(value: str | None) -> str`
-- Si calza `YYYY-MM` => `Mes YYYY` (usa `MONTHS_REVERSE`)
+- Si calza `YYYY-MM` => `Mes YYYY` según idioma activo (`EXPORT_TEXT["months"]`)
 - Si no => devuelve tal cual (para no perder info).
 
 ### `_join_location(city: str | None, country: str | None) -> str`
@@ -2555,6 +2714,17 @@ Inserta un `w:tr` antes de `row_idx` (o append si row_idx está al final).
 
 ---
 
+## Localización de headings core
+
+### `_find_heading_row_index(table, module_key: str) -> int | None`
+- Busca fila de heading por módulo (`experience`, `education`, `skills`) tolerando variantes ES/EN.
+
+### `_localize_core_headings(table) -> None`
+- Reescribe texto del heading core usando `EXPORT_TEXT` según idioma activo.
+- Se aplica al final del render, después del reordenamiento de módulos.
+
+---
+
 ## Riesgos típicos / debugging rápido
 - **Plantilla no compatible:** headers no en mayúsculas o texto distinto.
 - **Merged cells:** si no se usan `_unique_cells`, se escribe duplicado.
@@ -2587,7 +2757,7 @@ El archivo contiene **tres grandes piezas**:
 Este bloque se ejecuta apenas se carga el script y:
 
 - define helpers (`qs`, `qsa`, `randomId`)
-- inicializa tema (light/dark)
+- inicializa tema (light/dark) e idioma de UI (ES/EN)
 - inicializa repetidores (experience/education/skills)
 - inicializa fechas y toggle “Actualidad”
 - inicializa extras (secciones y entradas)
@@ -2629,7 +2799,30 @@ const randomId = () => Math.random().toString(16).slice(2,10);
 
 ---
 
-## 2) Tema claro/oscuro (persistente)
+## 2) Idioma ES/EN + tema (persistente)
+
+### 2.0 Idioma de UI (labels, botones, placeholders, meses)
+
+Constantes clave:
+- `UI_LANG_STORAGE_KEY = "ui_lang"`
+- `MONTH_LABELS` (mapa de meses por idioma)
+- `UI_TEXT` (diccionario ES/EN para textos no editables de la UI)
+
+Flujo:
+1) Lee idioma guardado en `localStorage.ui_lang`.
+2) Fallback a español (`es`) si no hay valor válido.
+3) Aplica:
+   - `root.dataset.lang`
+   - `root.lang`
+4) `applyUiLanguage()` sincroniza:
+   - `input[data-ui-lang-input]` (para que backend exporte con el mismo idioma)
+   - `localizeDateSelectors()` (meses/placeholders de fechas)
+   - `setFixedUiTexts()` (botones, labels, headers no editables, tooltips, file picker)
+   - `updateLanguageButtons()` y `updateThemeButtons()`
+
+Botón de idioma:
+- selector: `[data-lang-toggle]`
+- comportamiento: alterna `es <-> en`, persiste en localStorage y reaplica toda la localización sin recargar.
 
 ### 2.1 Cálculo del tema inicial
 
@@ -3234,8 +3427,18 @@ Para que otros flujos (agregar/eliminar módulos) recalculen:
 
 ## 16) Contratos `data-*` usados (resumen)
 
+### Idioma
+- `[data-lang-toggle]`
+- `input[data-ui-lang-input]`
+
 ### Tema
 - `[data-theme-toggle]`
+
+### Upload / file picker
+- `[data-file-picker]`
+- `[data-file-input]`
+- `[data-file-picker-button]`
+- `[data-file-picker-name]`
 
 ### Repeats base
 - `[data-add="experience|education|skills"]`
@@ -3288,6 +3491,7 @@ Para que otros flujos (agregar/eliminar módulos) recalculen:
 ## 17) Flujo típico “happy path” (alto nivel)
 
 1) Carga página:
+- idioma inicial (`es`/`en`) desde `localStorage` + aplicación de textos fijos
 - tema inicial
 - highlights mínimos
 - fechas inicializadas (hidden <-> selects)
