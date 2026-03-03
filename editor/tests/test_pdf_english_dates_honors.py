@@ -1,3 +1,5 @@
+"""Pruebas de fechas en ingles y honores en educacion dentro del flujo PDF."""
+
 import io
 from unittest.mock import patch
 
@@ -14,6 +16,7 @@ def _line(
     is_bullet: bool = False,
     is_bold: bool = False,
 ) -> dict:
+    """Construye una linea raw minima como las que entrega el extractor."""
     return {
         "text": text,
         "indent": indent,
@@ -25,7 +28,10 @@ def _line(
 
 
 class PdfEnglishDatesHonorsTests(SimpleTestCase):
+    """Protege ramas de parseo especificas de ingles en `pdf_parse`."""
+
     def test_parse_experience_detects_english_month_date_ranges(self) -> None:
+        """Los meses en ingles deben preservarse en `date_range` de experiencia."""
         raw_lines = [
             _line("Example Corp | Remote", is_bold=True),
             _line("Developer | Jan 2023 – May 2023"),
@@ -38,6 +44,7 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
         self.assertEqual(blocks[0].get("role"), "Developer")
 
     def test_parse_pdf_education_in_english_maps_dates_and_honors(self) -> None:
+        """EDUCATION en ingles debe mapear fechas y honors al output estructurado."""
         assembled = {
             "header": {
                 "name": "Sample Candidate",

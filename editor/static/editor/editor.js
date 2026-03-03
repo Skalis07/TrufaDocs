@@ -1,6 +1,9 @@
 (() => {
+  // Devuelve el primer elemento que coincide con el selector en un root dado.
   const qs = (sel, root=document) => root.querySelector(sel);
+  // Devuelve todos los elementos que coinciden con el selector como array real.
   const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  // Genera un id corto pseudo-aleatorio para claves temporales de modulos/entradas.
   const randomId = () => Math.random().toString(16).slice(2,10);
 
   // Tema e idioma con persistencia en localStorage
@@ -196,18 +199,22 @@
   root.dataset.lang = initialLang;
   root.lang = initialLang;
 
+  // Lee el idioma activo desde data-lang del <html>.
   const getLang = () => (root.dataset.lang === "en" ? "en" : "es");
+  // Traduce una key con fallback a espanol y, si no existe, devuelve la key.
   const t = (key) => {
     const lang = getLang();
     return (UI_TEXT[lang] && UI_TEXT[lang][key]) || UI_TEXT.es[key] || key;
   };
 
+  // Reemplaza textContent de todos los nodos que matchean un selector.
   const setTextBySelector = (selector, key, scope = document) => {
     qsa(selector, scope).forEach((node) => {
       node.textContent = t(key);
     });
   };
 
+  // Actualiza title + aria-label en botones/controles para accesibilidad.
   const setButtonTitleBySelector = (selector, key, scope = document) => {
     qsa(selector, scope).forEach((button) => {
       const title = t(key);
@@ -216,6 +223,7 @@
     });
   };
 
+  // Busca campos por name y cambia el <label> de su .field contenedor.
   const setFieldLabelByName = (name, key, scope = document) => {
     qsa(`[name="${name}"]`, scope).forEach((fieldNode) => {
       const field = fieldNode.closest(".field");
@@ -224,6 +232,7 @@
     });
   };
 
+  // Mantiene el numero de item en headers tipo "Experiencia 2" al traducir.
   const setRepeatHeaderPrefix = (selector, key, scope = document) => {
     qsa(selector, scope).forEach((labelNode) => {
       const currentText = (labelNode.textContent || "").trim();
@@ -233,6 +242,7 @@
     });
   };
 
+  // Reescribe labels con checkbox preservando el input dentro del label.
   const setCheckboxLabelText = (selector, key, scope = document) => {
     qsa(selector, scope).forEach((labelNode) => {
       const input = qs("input[data-role-current]", labelNode);
@@ -242,6 +252,7 @@
     });
   };
 
+  // Cambia el titulo de una seccion segun un campo conocido dentro de ella.
   const setSectionHeadingByFieldName = (fieldName, key, scope = document) => {
     qsa(`[name="${fieldName}"]`, scope).forEach((fieldNode) => {
       const section = fieldNode.closest(".section");
@@ -250,6 +261,7 @@
     });
   };
 
+  // Sincroniza el texto visible del picker con el nombre real del archivo elegido.
   const refreshFilePickerLabel = (picker) => {
     const input = qs("[data-file-input]", picker);
     const nameNode = qs("[data-file-picker-name]", picker);
@@ -258,6 +270,7 @@
     nameNode.textContent = hasFile ? input.files[0].name : t("file_no_selection");
   };
 
+  // Inicializa validaciones/mensajes del file input y evita bind doble.
   const initFilePickers = (scope = document) => {
     qsa("[data-file-picker]", scope).forEach((picker) => {
       const input = qs("[data-file-input]", picker);
@@ -281,6 +294,7 @@
     });
   };
 
+  // Aplica todos los textos fijos traducibles (labels, botones, titulos, placeholders).
   const setFixedUiTexts = (scope = document) => {
     const helpToggle = qs(".help-toggle");
     if (helpToggle) {
@@ -418,6 +432,7 @@
     setCheckboxLabelText("[data-extra-entry] .date-current", "label_present", scope);
   };
 
+  // Traduce placeholders de selectores de fecha (Mes/Ano y abreviaturas de meses).
   const localizeDateSelectors = (scope = document) => {
     const monthMap = MONTH_LABELS[getLang()] || MONTH_LABELS.es;
     qsa("[data-month-select]", scope).forEach((select) => {
@@ -439,6 +454,7 @@
   const languageButtons = Array.from(
     document.querySelectorAll("[data-lang-toggle]"),
   );
+  // Refresca estado visual/accesible de botones de idioma segun idioma activo.
   const updateLanguageButtons = () => {
     const isEnglish = getLang() === "en";
     languageButtons.forEach((button) => {
@@ -460,6 +476,7 @@
   const themeButtons = Array.from(
     document.querySelectorAll("[data-theme-toggle]"),
   );
+  // Refresca estado visual/accesible de botones de tema segun tema activo.
   const updateThemeButtons = () => {
     const isDark = root.dataset.theme === "dark";
     themeButtons.forEach((button) => {
@@ -470,6 +487,7 @@
     });
   };
 
+  // Escribe el idioma actual en todos los hidden que viajan al backend.
   const updateUiLangInputs = () => {
     const currentLang = getLang();
     qsa("input[data-ui-lang-input]").forEach((input) => {
@@ -477,6 +495,7 @@
     });
   };
 
+  // Punto unico para rehidratar UI localizada dentro de un scope.
   const applyUiLanguage = (scope = document) => {
     updateUiLangInputs();
     localizeDateSelectors(scope);
@@ -509,8 +528,6 @@
     });
   });
 
-  applyUiLanguage(document);
-
   const addHandlers = [
     {
       button: "[data-add='experience']",
@@ -523,9 +540,10 @@
       tpl: "#tpl-education",
     },
     { button: "[data-add='skills']", list: "#skills-list", tpl: "#tpl-skills" },
-      ];
+  ];
 
   // Helpers para la lista de "hitos" en experiencia
+  // Crea una fila editable de highlight (input + boton eliminar).
   const highlightRow = (value = "") => {
     const row = document.createElement("div");
     row.className = "highlight-row";
@@ -546,6 +564,7 @@
     return row;
   };
 
+  // Garantiza que cada bloque de highlights tenga al menos una fila visible.
   const ensureHighlightRows = (block) => {
     const list = block.querySelector(".highlight-list");
     if (!list) return;
@@ -555,6 +574,7 @@
   };
 
   // Fechas: guardamos YYYY o YYYY-MM en un input hidden
+  // Interpreta un string de fecha del hidden y lo separa en {year, month, current}.
   const parseDateValue = (value) => {
     const normalized = value.trim();
     if (!normalized) return { year: "", month: "", current: false };
@@ -566,6 +586,7 @@
     return { year: "", month: "", current: false };
   };
 
+  // Sincroniza los selects visibles con el hidden canonico (YYYY, YYYY-MM o Actualidad).
   const syncDateField = (block) => {
     const hidden = block.querySelector("input[type='hidden']");
     const monthSelect = block.querySelector("[data-month-select]");
@@ -588,6 +609,7 @@
     hidden.value = year ? (month ? `${year}-${month}` : year) : "";
   };
 
+  // Inicializa un bloque de fecha: parse inicial + listeners de cambio.
   const initDateField = (block) => {
     if (!block || block.dataset.dateInit === "1") return;
     block.dataset.dateInit = "1";
@@ -607,15 +629,19 @@
     monthSelect.addEventListener("change", () => syncDateField(block));
   };
 
+  // Maneja el toggle "actual/presente" para fecha fin de un repeat.
   const initCurrentToggle = (repeat) => {
     const toggle = repeat.querySelector("[data-role-current]");
     const endField = repeat.querySelector("[data-date-field][data-date-end]");
     if (!toggle || !endField) return;
+    if (toggle.dataset.currentToggleInit === "1") return;
+    toggle.dataset.currentToggleInit = "1";
 
     const hidden = endField.querySelector("input[type='hidden']");
     const yearSelect = endField.querySelector("[data-year-select]");
     const monthSelect = endField.querySelector("[data-month-select]");
 
+    // Aplica el estado del checkbox al hidden y a los controles de fecha.
     const apply = () => {
       const wasForcedCurrent = endField.dataset.forceCurrent === "1";
       if (toggle.checked) {
@@ -656,6 +682,7 @@
     apply();
   };
 
+  // Inicializa todos los bloques de fecha y toggles de "actual" dentro de un root.
   const initDateFields = (rootEl = document) => {
     rootEl
       .querySelectorAll("[data-date-field]")
@@ -668,6 +695,7 @@
   // -------------------------------
   // NUEVO: modo por ENTRADA (entry)
   // -------------------------------
+  // Muestra/oculta campos segun el modo de una entrada extra (o modo heredado de seccion).
   const syncExtraEntryMode = (entry) => {
     // Modo por entrada (legacy) o por sección (actual).
     let mode = null;
@@ -691,6 +719,7 @@
     });
   };
 
+  // Inicializa una entrada extra: relacion con seccion, modo, fechas e i18n.
   const initExtraEntry = (entry, sectionId) => {
     if (!entry) return;
 
@@ -724,6 +753,7 @@
     applyUiLanguage(entry);
   };
 
+  // Inicializa una seccion extra completa (ids, titulo, modo, entradas y acciones).
   const initExtraSection = (section) => {
     // `section` es el root [data-extra-section]
     const moduleBlock = section.closest(".module-block") || section;
@@ -744,26 +774,34 @@
     const modeSelect = section.querySelector('[data-extra-mode]');
     if (modeSelect && moduleBlock.classList.contains("module-block")) {
       moduleBlock.dataset.moduleType = modeSelect.value || "detailed";
-      modeSelect.addEventListener("change", () => {
-        moduleBlock.dataset.moduleType = modeSelect.value || "detailed";
-      });
+      if (modeSelect.dataset.boundModuleType !== "1") {
+        modeSelect.dataset.boundModuleType = "1";
+        modeSelect.addEventListener("change", () => {
+          moduleBlock.dataset.moduleType = modeSelect.value || "detailed";
+        });
+      }
     }
 
     // Título: reflejarlo en el header del módulo (pill + nombre)
     const titleInput = section.querySelector('[data-extra-title]');
     const titleLabel = moduleBlock.querySelector('[data-module-name]');
+    // Refleja en tiempo real el titulo del input en el header del modulo.
     const syncTitle = () => {
       const titleValue = (titleInput?.value || "").trim();
       if (titleLabel) titleLabel.textContent = titleValue || t("untitled_module");
     };
     if (titleInput) {
-      titleInput.addEventListener("input", syncTitle);
+      if (titleInput.dataset.boundModuleTitle !== "1") {
+        titleInput.dataset.boundModuleTitle = "1";
+        titleInput.addEventListener("input", syncTitle);
+      }
       syncTitle();
     }
 
     // Eliminar: debe eliminar el módulo completo (no solo el contenido)
     const removeBtn = (moduleBlock || section).querySelector('[data-action="remove-extra-section"]');
-    if (removeBtn) {
+    if (removeBtn && removeBtn.dataset.boundRemoveExtraSection !== "1") {
+      removeBtn.dataset.boundRemoveExtraSection = "1";
       removeBtn.addEventListener("click", () => {
         (moduleBlock.classList.contains("module-block") ? moduleBlock : section).remove();
         // actualizar orden interno
@@ -781,7 +819,8 @@
     applyUiLanguage(section);
 
     const addEntryBtn = section.querySelector('[data-action="add-extra-entry"]');
-    if (addEntryBtn) {
+    if (addEntryBtn && addEntryBtn.dataset.boundAddExtraEntry !== "1") {
+      addEntryBtn.dataset.boundAddExtraEntry = "1";
       addEntryBtn.addEventListener("click", () => {
         const tpl = qs('#tpl-extra-entry');
         if (!tpl || !entriesRoot) return;
@@ -794,6 +833,7 @@
     }
   };
 
+  // Inicializa todas las secciones extra existentes dentro de un root.
   const initExtraSections = (rootEl = document) => {
     rootEl
       .querySelectorAll("[data-extra-section]")
@@ -805,6 +845,7 @@
 // - Si existe <template>, lo usa.
 // - Si NO existe, clona el último .repeat existente y limpia inputs.
 // --------------------
+// Limpia valores de un bloque clonado sin romper selects/checkboxes/hidden relevantes.
 const clearInputs = (rootEl) => {
   qsa("input, textarea, select", rootEl).forEach((el) => {
     const tag = el.tagName.toLowerCase();
@@ -828,6 +869,7 @@ const clearInputs = (rootEl) => {
   });
 };
 
+// Fallback: clona el ultimo repeat cuando no hay <template> disponible.
 const cloneRepeatFallback = (listEl) => {
   const last = listEl.querySelector(".repeat:last-child") || listEl.querySelector(".repeat");
   if (!last) return null;
@@ -835,8 +877,6 @@ const cloneRepeatFallback = (listEl) => {
 
   // Quitar filas dinámicas de hitos y reconstruirlas desde cero
   qsa(".highlight-row", clone).forEach((r) => r.remove());
-  // Limpiar errores/estados
-  qsa("[data-reorder-init]", clone).forEach((n) => n.removeAttribute("data-reorder-init"));
 
   clearInputs(clone);
   return clone;
@@ -877,6 +917,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
   // Cierra el dialogo de ayuda al hacer click fuera o con Escape
   const helpDialog = document.querySelector(".help");
   if (helpDialog) {
+    // Cierra el <details> de ayuda si el click ocurre fuera de ese bloque.
     const closeHelpIfOutside = (event) => {
       if (!helpDialog.open) return;
       const target = event.target;
@@ -982,6 +1023,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
 
 
 // --- Add extra module (always before the add-module block) ---
+// Inicializa el boton que inserta un modulo extra nuevo antes del bloque "Agregar".
 (function initAddExtraModule(){
   document.addEventListener("click", (e) => {
     const btn = e.target && e.target.closest ? e.target.closest('[data-action="add-extra-module"]') : null;
@@ -1032,15 +1074,17 @@ addHandlers.forEach(({ button, list, tpl }) => {
 })();
 
 // --- Extras: modo por sección (subtitle_items vs detailed) ---
+// Aplica visibilidad y habilitacion de campos segun el modo activo de la seccion extra.
 function applyExtraMode(sectionEl) {
   const sel = sectionEl.querySelector('[data-extra-mode]');
   if (!sel) return;
   const mode = sel.value || 'subtitle_items';
 
+  // Activa/desactiva controles de un contenedor sin romper controles criticos.
   const setEnabled = (containerEl, enabled) => {
     containerEl.querySelectorAll('input, select, textarea, button').forEach((node) => {
       // Nunca deshabilitar botones de "Eliminar entrada" ni el selector de modo
-      if (node.matches('[data-remove-extra-entry], [data-extra-mode]')) return;
+      if (node.matches('[data-remove], [data-extra-mode]')) return;
 
       // Para botones dentro del bloque, solo deshabilitar los que afectan al modo (add/remove highlights)
       if (node.tagName === 'BUTTON') {
@@ -1088,20 +1132,18 @@ document.addEventListener('change', (e) => {
   }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('[data-extra-section]').forEach(applyExtraMode);
-});
-
 
 // --- Core modules reorder (Experience / Education / Skills / Extras) ---
 (function initCoreModuleReorder() {
   // Reordenamiento (flechas) + orden interno (core_order) para módulos movibles.
   // Movibles: experience, education, skills, extra:* (NO incluye Datos ni el módulo "Agregar módulo extra")
+  // Helper local de query para este modulo de reorder.
   const query = (sel, root = document) => root.querySelector(sel);
   const container = query("#modules-list") || query("[data-modules]") || document.body;
   const orderInput = query('#structured-form input[name="core_order"]') || query("#core-order");
   const orderMapInput = query('#structured-form input[name="module_order_map"]') || query("#module-order-map");
 
+  // Define si un bloque es realmente movible dentro del orden principal.
   const isMovable = (el) =>
     el &&
     el.classList &&
@@ -1110,9 +1152,11 @@ document.addEventListener('DOMContentLoaded', () => {
     !el.classList.contains("module-fixed") &&
     !el.classList.contains("module-add");
 
+  // Obtiene la lista actual de bloques movibles en el orden visual del DOM.
   const getBlocks = () =>
     Array.from(container.querySelectorAll(".module-block[data-module-key]")).filter(isMovable);
 
+  // Sincroniza dataset.moduleOrder y mapa "module_order_map" para backend/debug.
   const syncInternalModuleOrder = () => {
     const blocks = getBlocks();
     blocks.forEach((block, idx) => {
@@ -1124,6 +1168,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .join(",");
   };
 
+  // Aplica el orden pedido en hidden "core_order" reinsertando nodos en el DOM.
   const applyOrderFromHiddenInput = () => {
     if (!orderInput) return;
     const requested = (orderInput.value || "")
@@ -1158,12 +1203,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  // Persiste en hidden "core_order" el orden actual visible en la UI.
   const syncOrderToHiddenInput = () => {
     if (!orderInput) return;
     const order = getBlocks().map((b) => b.dataset.moduleKey).filter(Boolean);
     orderInput.value = order.join(",");
   };
 
+  // Habilita/deshabilita flechas up/down segun posicion de cada bloque.
   const updateMoveButtonsState = () => {
     const blocks = getBlocks();
     blocks.forEach((b, idx) => {
@@ -1178,9 +1225,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const FOLLOW_SCROLL_MS = 560;
   let followScrollRaf = 0;
 
+  // Easing de animacion para scroll suave.
   const easeInOutCubic = (t) =>
     t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
+  // Hace scroll animado del viewport para seguir el bloque recien movido.
   const smoothScrollWindowTo = (targetY, durationMs = FOLLOW_SCROLL_MS) => {
     const clampedTarget = Math.max(0, targetY);
     const startY = window.scrollY || window.pageYOffset || 0;
@@ -1201,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const startTs = performance.now();
+    // Paso por frame del requestAnimationFrame.
     const step = (ts) => {
       const progress = Math.min(1, (ts - startTs) / durationMs);
       const eased = easeInOutCubic(progress);
@@ -1214,12 +1264,14 @@ document.addEventListener('DOMContentLoaded', () => {
     followScrollRaf = window.requestAnimationFrame(step);
   };
 
+  // Captura posiciones previas de bloques para animar transiciones tipo FLIP.
   const snapshotBlockPositions = () => {
     const map = new Map();
     getBlocks().forEach((el) => map.set(el, el.getBoundingClientRect()));
     return map;
   };
 
+  // Anima visualmente el reordenamiento comparando posiciones antes/despues.
   const animateReorder = (beforePositions) => {
     if (!beforePositions || !beforePositions.size) return;
     getBlocks().forEach((el) => {
@@ -1236,6 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
       el.style.transition = `transform ${REORDER_ANIM_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
       el.style.transform = "";
 
+      // Limpieza de estilos temporales al terminar la transicion.
       const cleanup = () => {
         el.style.transition = "";
         el.classList.remove("module-reorder-active");
@@ -1245,6 +1298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
+  // Ajusta el scroll para mantener visible el bloque movido.
   const followMovedBlock = (block) => {
     if (!block) return;
     const rect = block.getBoundingClientRect();
@@ -1258,6 +1312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     smoothScrollWindowTo(targetTop, FOLLOW_SCROLL_MS);
   };
 
+  // Mueve un bloque una posicion (up/down) y sincroniza estado asociado.
   const moveBlock = (block, dir) => {
     const beforePositions = snapshotBlockPositions();
     const blocks = getBlocks();
@@ -1307,5 +1362,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   applyOrderFromHiddenInput();
   window.__trufadocs_reorder.sync();
-})();;
+})();
 // --- End core modules reorder

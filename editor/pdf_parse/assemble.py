@@ -5,10 +5,12 @@ from .extract import Line, enrich_features
 
 
 def normalize_section_title(title: str) -> str:
+    """Normaliza un titulo de seccion para comparaciones estables."""
     return " ".join(title.split()).upper()
 
 
 def _looks_like_visual_title(line: Line) -> bool:
+    """Evalua si una linea parece titulo por rasgos visuales."""
     text = line.text.strip()
     if not text:
         return False
@@ -38,6 +40,7 @@ def _looks_like_visual_title(line: Line) -> bool:
 
 
 def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True) -> bool:
+    """Determina si una linea debe tratarse como titulo de seccion."""
     text = line.text.strip()
     if not text:
         return False
@@ -46,6 +49,11 @@ def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True)
     if line.has_email or line.has_phone or line.has_url:
         return False
     if line.is_date_range or line.is_open_date_range:
+        return False
+    # Evita falsos positivos en lineas de contenido tipo "ROL | CIUDAD".
+    # Los titulos reales casi nunca usan pipe, mientras que las filas de
+    # experiencia/extras si lo usan frecuentemente como separador.
+    if "|" in text and text.upper() not in KNOWN_SECTION_TITLES:
         return False
     if line.has_rule_below:
         return True
@@ -61,6 +69,7 @@ def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True)
 
 
 def parse_header(lines: list[Line]) -> dict:
+    """Extrae nombre, contactos y ubicacion desde lineas de cabecera."""
     header = {
         "name": None,
         "location": None,
@@ -71,6 +80,7 @@ def parse_header(lines: list[Line]) -> dict:
     }
 
     def _split_header_segments(text: str) -> list[str]:
+        """Divide una linea de cabecera en segmentos por separadores visuales."""
         segments = [part.strip() for part in text.split("|") if part.strip()]
         return segments or [text]
 
@@ -124,26 +134,41 @@ def parse_header(lines: list[Line]) -> dict:
 
 
 def assemble_sections(lines: list[Line]) -> dict:
+    """Agrupa lineas enriquecidas en header y secciones detectadas."""
     enrich_features(lines)
     lines = sorted(lines, key=lambda item: (item.page, item.top, item.x0))
 
-    use_rule_only = any(line.has_rule_below for line in lines)
-    use_text = not use_rule_only
-    use_visual = not use_rule_only
+    # Mantener detección textual/visual activa en todo el documento.
+    # has_rule_below ya actúa como señal fuerte dentro de is_section_title.
+    use_text = True
+    use_visual = True
 
     first_section_idx = None
     for index, line in enumerate(lines):
         if is_section_title(line, use_text=use_text, use_visual=False):
             first_section_idx = index
             break
+    if first_section_idx is None:
+        for index, line in enumerate(lines):
+            if is_section_title(line, use_text=use_text, use_visual=use_visual):
+                first_section_idx = index
+                break
 
-    header_lines = lines[: first_section_idx or 0]
+    if first_section_idx is None:
+        header_lines = list(lines)
+    else:
+        header_lines = lines[:first_section_idx]
     header = parse_header(header_lines)
 
     sections: list[dict] = []
     current_section: dict | None = None
 
-    for line in lines[first_section_idx or 0 :]:
+    if first_section_idx is None:
+        section_source: list[Line] = []
+    else:
+        section_source = lines[first_section_idx:]
+
+    for line in section_source:
         if is_section_title(line, use_text=use_text, use_visual=use_visual):
             if current_section is not None:
                 sections.append(current_section)

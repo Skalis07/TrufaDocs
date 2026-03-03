@@ -9,6 +9,7 @@ from .extract import extract_lines
 from .parsers import parse_education, parse_experience, parse_skills
 
 from .. import structure
+from ..structure_types import ExtraLine, ExtraSectionRaw
 
 REMOTE_LOCATION_HINTS = {
     "remoto",
@@ -43,6 +44,7 @@ SKILLS_SECTION_TITLES = {
 
 
 def _normalize_section_title(value: str) -> str:
+    """Normaliza titulos de seccion removiendo acentos y ruido menor."""
     text = unicodedata.normalize("NFKD", (value or "").strip())
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     text = text.replace(":", " ")
@@ -50,12 +52,14 @@ def _normalize_section_title(value: str) -> str:
 
 
 def _strip_prefix(text: str, pattern) -> str:
+    """Quita un prefijo regex conocido y retorna el texto restante."""
     if not text:
         return ""
     return pattern.sub("", text).strip()
 
 
 def _map_date_range(date_range: str) -> tuple[str, str]:
+    """Convierte un rango textual en tokens start/end normalizados."""
     if not date_range:
         return "", ""
     start, end, _ = structure._extract_date_range_from_line(date_range)
@@ -63,6 +67,7 @@ def _map_date_range(date_range: str) -> tuple[str, str]:
 
 
 def _map_location(value: str) -> tuple[str, str]:
+    """Mapea una ubicacion libre a (ciudad, pais)."""
     if not value:
         return "", ""
     city, country = structure._parse_location(value)
@@ -70,6 +75,7 @@ def _map_location(value: str) -> tuple[str, str]:
 
 
 def _map_tech(value: str) -> str:
+    """Extrae o normaliza texto de tecnologias desde una linea."""
     if not value:
         return ""
     mapped = structure._extract_tech_from_line(value)
@@ -79,6 +85,7 @@ def _map_tech(value: str) -> str:
 
 
 def _select_link(links: Iterable[str], keyword: str) -> str:
+    """Selecciona el primer link que contiene una palabra clave."""
     keyword = keyword.lower()
     for link in links:
         if keyword in link.lower():
@@ -87,6 +94,7 @@ def _select_link(links: Iterable[str], keyword: str) -> str:
 
 
 def _infer_description(header_lines, header_name: str | None, location: str | None, contacts: list[str]) -> str:
+    """Infiera resumen basico usando lineas de header no clasificadas."""
     description_parts: list[str] = []
     for line in header_lines:
         text = line.text.strip()
@@ -105,6 +113,7 @@ def _infer_description(header_lines, header_name: str | None, location: str | No
 
 
 def _map_experience(blocks: list[dict]) -> list[dict]:
+    """Mapea bloques de experiencia parseados al schema de estructura."""
     mapped: list[dict] = []
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
@@ -134,6 +143,7 @@ def _map_experience(blocks: list[dict]) -> list[dict]:
 
 
 def _map_education(blocks: list[dict]) -> list[dict]:
+    """Mapea bloques de educacion parseados al schema de estructura."""
     mapped: list[dict] = []
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
@@ -154,6 +164,7 @@ def _map_education(blocks: list[dict]) -> list[dict]:
 
 
 def _map_skills(groups: list[dict]) -> list[dict]:
+    """Mapea grupos de skills a pares categoria/items."""
     mapped: list[dict] = []
     for group in groups:
         title = group.get("group_title") or ""
@@ -164,6 +175,7 @@ def _map_skills(groups: list[dict]) -> list[dict]:
 
 
 def _split_org_with_inline_location(value: str) -> tuple[str, str]:
+    """Separa organizacion y ubicacion cuando vienen inline con separador."""
     text = (value or "").strip()
     if not text:
         return "", ""
@@ -178,6 +190,7 @@ def _split_org_with_inline_location(value: str) -> tuple[str, str]:
 
 
 def _map_extra_entries_from_experience(blocks: list[dict]) -> list[dict]:
+    """Convierte bloques de experiencia al formato detallado de extras."""
     entries: list[dict] = []
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
@@ -218,7 +231,27 @@ def _map_extra_entries_from_experience(blocks: list[dict]) -> list[dict]:
 
 
 def _is_detailed_extra_entry(entry: dict) -> bool:
+    """Indica si una entrada extra contiene campos de modo detallado."""
     return any((entry.get(key) or "").strip() for key in ("title", "where", "tech", "start", "end", "city", "country"))
+
+
+def _to_extra_lines(raw_lines: list[dict]) -> list[str | ExtraLine]:
+    """Normaliza lineas crudas al tipo aceptado por structure._parse_extras."""
+    lines: list[str | ExtraLine] = []
+    for raw in raw_lines:
+        if not isinstance(raw, dict):
+            lines.append(str(raw or ""))
+            continue
+        line: ExtraLine = {
+            "text": str(raw.get("text") or ""),
+            "indent": float(raw.get("indent") or 0.0),
+            "is_bullet": bool(raw.get("is_bullet")),
+            "is_bold": bool(raw.get("is_bold")),
+            "size_ratio": float(raw.get("size_ratio") or 0.0),
+            "ends_with_colon": bool(raw.get("ends_with_colon")),
+        }
+        lines.append(line)
+    return lines
 
 
 def _should_prefer_experience_extra(
@@ -226,6 +259,7 @@ def _should_prefer_experience_extra(
     generic_entries: list[dict],
     experience_entries: list[dict],
 ) -> bool:
+    """Decide si conviene usar extras detallados derivados de experiencia."""
     if not experience_entries:
         return False
 
@@ -258,8 +292,10 @@ def _should_prefer_experience_extra(
 
 
 def _parse_extra_section(title: str, raw_lines: list[dict], section_index: int) -> dict:
+    """Parsea una seccion no-core y devuelve su representacion de extras."""
     section_id = f"extra-{section_index}"
-    parsed_generic = structure._parse_extras([{"title": title, "lines": raw_lines}])
+    section_input: ExtraSectionRaw = {"title": title, "lines": _to_extra_lines(raw_lines)}
+    parsed_generic = structure._parse_extras([section_input])
     generic_section = (
         parsed_generic[0]
         if parsed_generic
@@ -281,6 +317,7 @@ def _parse_extra_section(title: str, raw_lines: list[dict], section_index: int) 
 
 
 def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
+    """Pipeline principal: PDF -> lineas -> secciones -> estructura final."""
     try:
         lines = extract_lines(file_obj)
     except Exception as exc:
@@ -324,6 +361,7 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
     seen_core: set[str] = set()
 
     def register_core(module_id: str) -> None:
+        """Registra el primer encuentro de cada modulo core para core_order."""
         if module_id in {"experience", "education", "skills"} and module_id not in seen_core:
             detected_order.append(module_id)
             seen_core.add(module_id)

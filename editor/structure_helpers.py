@@ -22,6 +22,14 @@ from .structure_constants import (
 # --------------------
 
 def _split_extra_blocks(lines: List[str]) -> List[List[str]]:
+    """Divide líneas de una sección extra en bloques lógicos.
+
+    Regla principal:
+    - una línea vacía cierra el bloque actual.
+    - un heading encontrado en medio también inicia un bloque nuevo.
+
+    Esto ayuda a que luego cada bloque se procese como una entrada separada.
+    """
     blocks: List[List[str]] = []
     current: List[str] = []
     for line in lines:
@@ -41,6 +49,11 @@ def _split_extra_blocks(lines: List[str]) -> List[List[str]]:
 
 
 def _group_entries(lines: List[str], section: str) -> List[List[str]]:
+    """Agrupa líneas consecutivas en entradas por sección (experience/education).
+
+    Se ignoran líneas vacías y headings. Cuando una línea parece inicio de
+    nueva entrada, se cierra el bloque actual y se abre uno nuevo.
+    """
     entries: List[List[str]] = []
     current: List[str] = []
 
@@ -63,6 +76,11 @@ def _group_entries(lines: List[str], section: str) -> List[List[str]]:
 
 # Reglas para detectar cuando empieza una nueva entrada
 def _looks_like_entry_start(line: str, current: List[str], section: str) -> bool:
+    """Decide si `line` marca el inicio de una nueva entrada en la sección actual.
+
+    Evita cortar por bullets, fechas o líneas de tecnologías. Luego usa señales
+    de organización y estado del bloque actual para una decisión contextual.
+    """
     if _is_bullet(line) or _looks_like_tech(line) or DATE_RANGE_RE.search(line):
         return False
     if not _looks_like_org(line):
@@ -82,6 +100,7 @@ def _looks_like_entry_start(line: str, current: List[str], section: str) -> bool
 # --------------------
 
 def _is_bullet(line: str) -> bool:
+    """Indica si una línea empieza con marcador de viñeta."""
     return bool(BULLET_RE.search(line.strip()))
 
 
@@ -147,6 +166,11 @@ def _looks_like_tech(line: str) -> bool:
 
 
 def _looks_like_org(line: str) -> bool:
+    """Heurística para detectar líneas que parecen nombre de organización.
+
+    Descarta líneas de ubicación pura y de educación/honores, y favorece
+    patrones con pistas típicas de empresa/institución o capitalización fuerte.
+    """
     normalized = _normalize_ascii(line)
     if len(line.strip()) > 80:
         return False
@@ -171,6 +195,7 @@ def _looks_like_org(line: str) -> bool:
 
 
 def _looks_like_location(line: str) -> bool:
+    """Heurística rápida para detectar si una línea tiene forma de ubicación."""
     if any(char.isdigit() for char in line):
         return False
     if len(line) >= 60:
@@ -183,6 +208,11 @@ def _looks_like_location(line: str) -> bool:
 
 
 def _split_role_company(line: str) -> Tuple[str, str]:
+    """Intenta separar una línea combinada en (rol, empresa).
+
+    Soporta separadores comunes como '-', '—', '|', además de textos tipo
+    'en'/'at'. Si no puede separar, retorna (linea, '').
+    """
     lowered = _normalize_ascii(line)
     if " - " in line:
         role, company = [part.strip() for part in line.split(" - ", 1)]
@@ -205,13 +235,23 @@ def _split_role_company(line: str) -> Tuple[str, str]:
     return line.strip(), ""
 
 
+# --------------------
+# Deteccion de headings
+# --------------------
+
 def _normalize_heading_line(line: str) -> str:
+    """Limpia una línea para compararla como posible título/heading."""
     cleaned = _clean_bullet(line).strip()
     cleaned = re.sub(r"^[^A-Za-zÀ-ÿ]+", "", cleaned)
     return cleaned.strip()
 
 
 def _match_heading(line: str) -> Tuple[str, str]:
+    """Mapea una línea a una sección conocida y retorna (clave, título original).
+
+    Ejemplo de clave: 'experience', 'education', 'skills', 'extra'.
+    Si no coincide con un heading válido, retorna ('', '').
+    """
     if _is_bullet(line):
         return "", ""
     cleaned_line = _normalize_heading_line(line)
@@ -233,6 +273,7 @@ def _match_heading(line: str) -> Tuple[str, str]:
 
 
 def _is_extra_keyword_heading(line: str) -> bool:
+    """Valida si una línea coincide explícitamente con keywords de sección extra."""
     if _is_bullet(line):
         return False
     cleaned_line = _normalize_heading_line(line)
@@ -248,6 +289,11 @@ def _is_extra_keyword_heading(line: str) -> bool:
 
 
 def _is_extra_heading_after_skills(line: str) -> bool:
+    """Detecta headings extra en contexto post-skills.
+
+    Es más tolerante que `_match_heading` para capturar módulos adicionales
+    que suelen aparecer al final del CV sin nombre estándar.
+    """
     if _is_explicit_extra_heading(line):
         return True
     if _is_bullet(line):
@@ -266,7 +312,10 @@ def _is_extra_heading_after_skills(line: str) -> bool:
         if len(normalized) >= 4 and len(normalized) <= 40 and "," not in normalized:
             return True
     return False
+
+
 def _is_explicit_extra_heading(line: str) -> bool:
+    """Detecta de forma estricta si una línea es heading de sección extra."""
     if _is_bullet(line):
         return False
     cleaned_line = _normalize_heading_line(line)
@@ -290,6 +339,7 @@ def _is_explicit_extra_heading(line: str) -> bool:
 
 
 def _is_heading(line: str) -> bool:
+    """Heurística genérica para identificar títulos cortos de sección."""
     if _is_bullet(line):
         return False
     stripped = _normalize_heading_line(line)
@@ -306,7 +356,16 @@ def _is_heading(line: str) -> bool:
     return False
 
 
+# --------------------
+# Extraccion de fechas, ubicacion y tech
+# --------------------
+
 def _extract_date_range_from_line(line: str) -> Tuple[str, str, str]:
+    """Extrae rango de fechas desde una línea y devuelve (start, end, resto).
+
+    `start` y `end` salen normalizados (por ejemplo YYYY-MM). `resto` es la
+    línea original sin el rango detectado, útil para seguir parseando rol/org.
+    """
     if not line:
         return "", "", line
     match = DATE_RANGE_RE.search(line)
@@ -322,6 +381,7 @@ def _extract_date_range_from_line(line: str) -> Tuple[str, str, str]:
 
 
 def _extract_location_from_line(line: str) -> Tuple[str, str]:
+    """Intenta extraer (ciudad, país) desde una línea libre."""
     if not line:
         return "", ""
     cleaned = re.sub(r"^(ubicacion|ubicación|location)\s*:\s*", "", line.strip(), flags=re.IGNORECASE)
@@ -338,6 +398,10 @@ def _extract_location_from_line(line: str) -> Tuple[str, str]:
 
 
 def _extract_tech_from_line(line: str) -> str:
+    """Detecta si una línea representa detalle de tecnologías/stack.
+
+    Devuelve la línea original si parece tech; en caso contrario, cadena vacía.
+    """
     if not line:
         return ""
     stripped = line.strip()
@@ -353,11 +417,17 @@ def _extract_tech_from_line(line: str) -> str:
     return ""
 
 
+# --------------------
+# Fechas: normalizacion y formato
+# --------------------
+
 def _contains_bullet_symbol(text: str) -> bool:
+    """Revisa si un texto contiene símbolos de viñeta Unicode."""
     return any(sym in text for sym in ("•", "‣", "●", "■", "▪", "○", "◦", "⁃", "∙", "·"))
 
 
 def _format_date_range(start: str, end: str) -> str:
+    """Convierte start/end normalizados a una cadena amigable para UI/export."""
     start = _format_date_token(start)
     end = _format_date_token(end)
     if start and end:
@@ -370,6 +440,7 @@ def _format_date_range(start: str, end: str) -> str:
 
 
 def _normalize_date_token(value: str) -> str:
+    """Normaliza tokens de fecha a formatos estándar (YYYY o YYYY-MM)."""
     value = (value or "").strip()
     if not value:
         return ""
@@ -394,6 +465,7 @@ def _normalize_date_token(value: str) -> str:
 
 
 def _format_date_token(value: str) -> str:
+    """Formatea token interno de fecha a formato legible (Mes YYYY)."""
     value = (value or "").strip()
     if not value:
         return ""
@@ -404,7 +476,12 @@ def _format_date_token(value: str) -> str:
     return value
 
 
+# --------------------
+# Limpieza y normalizacion de texto
+# --------------------
+
 def _join_paragraph(lines: List[str]) -> str:
+    """Une líneas en párrafos, preservando separación por líneas vacías."""
     chunks = []
     current: List[str] = []
     for line in lines:
@@ -419,24 +496,8 @@ def _join_paragraph(lines: List[str]) -> str:
     return "\n".join(chunks).strip()
 
 
-def _has_content(items: List[Dict], keys: List[str]) -> bool:
-    for item in items or []:
-        for key in keys:
-            value = item.get(key)
-            if isinstance(value, list) and any(value):
-                return True
-            if isinstance(value, str) and value.strip():
-                return True
-    return False
-
-
-def _trim_trailing_blanks(lines: List[str]) -> List[str]:
-    while lines and not lines[-1].strip():
-        lines.pop()
-    return lines
-
-
 def _compact_lines(lines: List[str]) -> List[str]:
+    """Limpia una lista de líneas removiendo ruido y duplicados frecuentes."""
     compacted: List[str] = []
     seen: Dict[str, int] = {}
     last = ""
@@ -457,11 +518,16 @@ def _compact_lines(lines: List[str]) -> List[str]:
 
 
 def _first_match(pattern, text: str) -> str:
+    """Devuelve el primer match de regex como string o vacío si no existe."""
     match = pattern.search(text)
     return match.group(0).strip() if match else ""
 
 
 def _normalize_ascii(text: str) -> str:
+    """Normaliza texto para comparaciones robustas.
+
+    Remueve acentos, normaliza espacios y pasa a minúsculas.
+    """
     normalized = unicodedata.normalize("NFKD", text)
     cleaned = "".join(char for char in normalized if not unicodedata.combining(char))
     cleaned = cleaned.replace("\u00a0", " ")
@@ -470,6 +536,7 @@ def _normalize_ascii(text: str) -> str:
 
 
 def _clean_bullet(text: str) -> str:
+    """Quita marcadores de viñeta y limpieza básica de bordes."""
     cleaned = text
     for bullet in ("\u2022", "\u2023", "\u25cf", "\u25a0", "\u25aa", "\u25cb", "\u25e6", "\u2043", "\u2219", "\u00b7"):
         cleaned = cleaned.replace(bullet, "")
@@ -477,7 +544,16 @@ def _clean_bullet(text: str) -> str:
     return cleaned.strip("-* ").strip()
 
 
+# --------------------
+# Manejo de highlights
+# --------------------
+
 def _append_highlight(highlights: List[str], line: str) -> None:
+    """Agrega una línea al listado de highlights manejando divisiones/continuaciones.
+
+    - Si encuentra múltiples bullets en una misma línea, los separa.
+    - Si detecta continuación de frase, concatena con el highlight anterior.
+    """
     raw = line or ""
     if _contains_bullet_symbol(raw):
         parts = re.split(r"[•‣●■▪○◦⁃∙·]+", raw)
@@ -502,6 +578,7 @@ def _append_highlight(highlights: List[str], line: str) -> None:
 
 
 def _is_continuation(previous: str, current: str) -> bool:
+    """Heurística para detectar si `current` continúa a `previous`."""
     if not previous or not current:
         return False
     if previous[-1] in ".;:!?":
@@ -514,6 +591,7 @@ def _is_continuation(previous: str, current: str) -> bool:
 
 
 def _split_highlight_chunks(text: str) -> List[str]:
+    """Divide un texto de highlight en chunks por saltos reales o literales '\\n'."""
     chunks: List[str] = []
     raw_parts = text.replace("\r", "").split("\\n")
     for part in raw_parts:
@@ -524,7 +602,12 @@ def _split_highlight_chunks(text: str) -> List[str]:
     return chunks or [text]
 
 
+# --------------------
+# Parseo de ubicacion
+# --------------------
+
 def _parse_location(line: str) -> Tuple[str, str]:
+    """Parsea una ubicación libre y devuelve (ciudad, país) cuando es confiable."""
     candidate = line.strip()
     if not candidate:
         return "", ""
@@ -550,6 +633,7 @@ def _parse_location(line: str) -> Tuple[str, str]:
 
 
 def _is_location_candidate(candidate: str, contact_values: Set[str]) -> bool:
+    """Filtra candidatos de ubicación descartando contactos y ruido común."""
     if any(value in candidate for value in contact_values):
         return False
     normalized = _normalize_ascii(candidate)

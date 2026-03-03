@@ -643,7 +643,7 @@
                             <select class="year-select" data-year-select>
                               <option value="">Año</option>
                               {% for year in year_choices %}
-                              <option value="">{{ year }}</option>
+                              <option value="{{ year }}">{{ year }}</option>
                               {% endfor %}
                             </select>
                             <select class="month-select" data-month-select>
@@ -663,7 +663,7 @@
                             <select class="year-select" data-year-select>
                               <option value="">Año</option>
                               {% for year in year_choices %}
-                              <option value="">{{ year }}</option>
+                              <option value="{{ year }}">{{ year }}</option>
                               {% endfor %}
                             </select>
                             <select class="month-select" data-month-select>
@@ -683,7 +683,7 @@
                         <select name="exp_country" data-country-select>
                           <option value="">Selecciona país</option>
                           {% for country in country_choices %}
-                          <option value="" {% if country == exp.country %}selected{% endif %}>{{ country }}</option>
+                          <option value="{{ country }}">{{ country }}</option>
                           {% endfor %}
                         </select>
                       </div>
@@ -699,19 +699,10 @@
                         <label>Hitos alcanzados (uno por línea)</label>
                         <div class="highlight-block" data-highlight-block>
                           <div class="highlight-list">
-                            {% if exp.highlights %}
-                            {% for highlight in exp.highlights %}
                             <div class="highlight-row">
                               <input type="text" class="highlight-input" value="" />
                               <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
                             </div>
-                            {% endfor %}
-                            {% else %}
-                            <div class="highlight-row">
-                              <input type="text" class="highlight-input" value="" />
-                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
-                            </div>
-                            {% endif %}
                           </div>
                           <div class="highlight-actions">
                             <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
@@ -745,7 +736,7 @@
                             <select class="year-select" data-year-select>
                               <option value="">Año</option>
                               {% for year in year_choices %}
-                              <option value="">{{ year }}</option>
+                              <option value="{{ year }}">{{ year }}</option>
                               {% endfor %}
                             </select>
                             <select class="month-select" data-month-select>
@@ -765,7 +756,7 @@
                             <select class="year-select" data-year-select>
                               <option value="">Año</option>
                               {% for year in year_choices %}
-                              <option value="">{{ year }}</option>
+                              <option value="{{ year }}">{{ year }}</option>
                               {% endfor %}
                             </select>
                             <select class="month-select" data-month-select>
@@ -785,7 +776,7 @@
                         <select name="edu_country" data-country-select>
                           <option value="">Selecciona país</option>
                           {% for country in country_choices %}
-                          <option value="" {% if country == edu.country %}selected{% endif %}>{{ country }}</option>
+                          <option value="{{ country }}">{{ country }}</option>
                           {% endfor %}
                         </select>
                       </div>

@@ -1,3 +1,5 @@
+"""Parsing y serializacion de CV entre texto libre, POST y estructura interna."""
+
 import re
 from typing import Dict, List, Tuple, Optional, Any
 
@@ -30,8 +32,8 @@ from .structure_helpers import (
 )
 from .structure_types import ExtraSectionRaw
 
-# Estructura base usada por la UI y el parser
 def default_structure() -> Dict:
+    """Devuelve la estructura minima compatible con la UI y los exports."""
     return {
         "meta": {"core_order": "experience,education,skills"},
         "basics": {
@@ -124,6 +126,7 @@ def _build_core_order_from_detected(
 
 # Entrada principal del parser: texto -> estructura
 def parse_resume(text: str) -> Dict:
+    """Parsea texto libre de CV y lo transforma al schema estructurado interno."""
     data = default_structure()
     lines = _compact_lines([line.strip() for line in text.splitlines()])
     contact = _extract_contact(text)
@@ -152,11 +155,13 @@ def parse_resume(text: str) -> Dict:
 
 # Convierte estructura -> texto (vista previa / export libre)
 def build_text_from_structure(data: Dict) -> str:
+    """Genera una version de texto legible a partir del schema estructurado."""
     # Defensive: accept None
     if not data:
         data = {}
 
     def _fmt_month_year(token: str) -> str:
+        """Formatea YYYY o YYYY-MM en formato humano corto."""
         token = (token or "").strip()
         if not token:
             return ""
@@ -176,6 +181,7 @@ def build_text_from_structure(data: Dict) -> str:
         return f"{months.get(month_i, str(month_i).zfill(2))} {year}"
 
     def _format_date_range(start: Any, end: Any, is_current: bool = False) -> str:
+        """Compone un rango de fechas legible con soporte de "Actual"."""
         s0 = _fmt_month_year(str(start or "").strip())
         e0 = _fmt_month_year(str(end or "").strip())
         if is_current and not e0:
@@ -189,11 +195,13 @@ def build_text_from_structure(data: Dict) -> str:
         return ""
 
     def _format_location(city: Any, country: Any) -> str:
+        """Une ciudad y pais en una sola linea de ubicacion."""
         c1 = (str(city or "").strip())
         c2 = (str(country or "").strip())
         return ", ".join([x for x in [c1, c2] if x])
 
     def _format_detail_line(value: Any) -> str:
+        """Normaliza valores opcionales para lineas de detalle."""
         return str(value or "").strip()
 
     basics = data.get("basics") or {}
@@ -239,6 +247,7 @@ def build_text_from_structure(data: Dict) -> str:
         lines.extend(contact_lines)
 
     def emit_detail_section(title: str, entries: List[Dict], include_current_flag: bool = False):
+        """Renderiza una seccion detallada (experience/education)."""
         if not entries:
             return
         if lines:
@@ -281,6 +290,7 @@ def build_text_from_structure(data: Dict) -> str:
             lines.pop()
 
     def emit_detail_entry(entry: Dict, include_current_flag: bool = True):
+        """Renderiza una entrada detallada de una seccion extra."""
         subtitle = (entry.get("subtitle") or "").strip()
         where = (entry.get("where") or "").strip()
         date_range = _format_date_range(
@@ -310,6 +320,7 @@ def build_text_from_structure(data: Dict) -> str:
         lines.append("")
 
     def emit_subtitle_items_entry(entry: Dict):
+        """Renderiza una entrada tipo subtitulo + lista de items."""
         subtitle = (entry.get("subtitle") or "").strip()
         items = entry.get("items") or []
 
@@ -331,6 +342,7 @@ def build_text_from_structure(data: Dict) -> str:
                     lines.append(f"- {it}")
 
     def emit_skills_section(title: str, categories: List[Dict]):
+        """Renderiza la seccion de habilidades por categoria."""
         if not categories:
             return
         if lines:
@@ -348,6 +360,7 @@ def build_text_from_structure(data: Dict) -> str:
                 lines.append(items_str)
 
     def emit_extras(title: str, extra_sections: List[Dict]):
+        """Renderiza todas las secciones extra en bloque (modo compat)."""
         if not extra_sections:
             return
         if lines:
@@ -415,6 +428,11 @@ def build_text_from_structure(data: Dict) -> str:
 
 
 def structure_from_post(post_data) -> Dict:
+    """Normaliza payload del formulario web al schema interno de CV.
+
+    Soporta payloads completos y payloads sparsos por modo (campos ocultos
+    deshabilitados en frontend), preservando el orden de modulos.
+    """
     data = default_structure()
     data["basics"] = {
         "name": post_data.get("name", "").strip(),
@@ -549,6 +567,7 @@ def structure_from_post(post_data) -> Dict:
         field_mode: str,
         cursor_key: str,
     ) -> str:
+        """Lee un valor de entrada con soporte alineado y sparse por modo."""
         # Caso alineado por entrada (una posición por cada entry del formulario).
         if entry_count > 0 and len(values) == entry_count:
             return values[idx] if idx < len(values) else ""
@@ -573,7 +592,8 @@ def structure_from_post(post_data) -> Dict:
             sline = (line or "").strip()
             if not sline:
                 continue
-            sline = re.sub(r"^[\\s•\\-–—*·]+\\s*", "", sline).strip()
+            # Limpia prefijos comunes de bullets sin alterar el contenido real.
+            sline = re.sub(r"^[\s•\-–—*·]+\s*", "", sline).strip()
             if sline:
                 items.append(_clean_bullet(sline))
         return items
@@ -765,6 +785,7 @@ def structure_from_post(post_data) -> Dict:
 # --------------------
 
 def _extract_contact(text: str) -> Dict[str, str]:
+    """Extrae email, telefono y perfiles de LinkedIn/GitHub desde texto libre."""
     email = _first_match(EMAIL_RE, text)
     phone = _first_match(PHONE_RE, text)
     urls = URL_RE.findall(text)
@@ -787,6 +808,7 @@ def _extract_contact(text: str) -> Dict[str, str]:
 def _extract_name_and_description(
     lines: List[str], contact: Dict[str, str]
 ) -> Tuple[str, str, List[str]]:
+    """Obtiene nombre, descripcion inicial y lineas restantes para secciones."""
     cleaned = [line for line in lines if line is not None]
     contact_values = {v for v in contact.values() if v}
     name = ""
@@ -815,8 +837,8 @@ def _extract_name_and_description(
     return name, description, remaining
 
 
-# Detecta ubicacion (ciudad, pais) desde texto y lineas
-def _extract_location(text: str, lines: List[str], contact: Dict[str, str]) -> Tuple[str, str]:
+def _extract_location(_text: str, lines: List[str], contact: Dict[str, str]) -> Tuple[str, str]:
+    """Detecta ubicacion de cabecera (ciudad/pais) antes de llegar a secciones."""
     contact_values = {v for v in contact.values() if v}
     for line in lines:
         if not line:
@@ -839,6 +861,7 @@ def _extract_location(text: str, lines: List[str], contact: Dict[str, str]) -> T
 # --------------------
 
 def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraSectionRaw], List[str]]:
+    """Separa lineas en secciones core y extras, detectando orden observado."""
     sections: Dict[str, List[str]] = {"experience": [], "education": [], "skills": []}
     extras: List[ExtraSectionRaw] = []
     current_section = "other"
@@ -847,11 +870,13 @@ def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraS
     seen_core: set[str] = set()
 
     def register_core(module_id: str) -> None:
+        """Registra modulos core una sola vez para construir `core_order`."""
         if module_id in {"experience", "education", "skills"} and module_id not in seen_core:
             detected_order.append(module_id)
             seen_core.add(module_id)
 
     def register_extra(section_index: int) -> None:
+        """Registra una seccion extra con id temporal por posicion."""
         # El section_id real se asigna luego (_parse_extras), pero conservamos
         # posición relativa para mapearlo como extra-{idx}.
         detected_order.append(f"extra-{section_index}")
@@ -901,6 +926,7 @@ def _split_sections(lines: List[str]) -> Tuple[Dict[str, List[str]], List[ExtraS
 # --------------------
 
 def _parse_experience(lines: List[str]) -> List[Dict]:
+    """Parsea la seccion de experiencia a bloques normalizados por entrada."""
     blocks = _group_entries(lines, section="experience")
     experience: List[Dict] = []
     for block in blocks:
@@ -976,6 +1002,7 @@ def _parse_experience(lines: List[str]) -> List[Dict]:
 
 
 def _parse_education(lines: List[str]) -> List[Dict]:
+    """Parsea la seccion de educacion, incluyendo honors y fechas."""
     blocks = _group_entries(lines, section="education")
     education: List[Dict] = []
     for block in blocks:
@@ -1031,11 +1058,13 @@ def _parse_education(lines: List[str]) -> List[Dict]:
 
 
 def _parse_skills(lines: List[str]) -> List[Dict]:
+    """Parsea habilidades agrupando categorias y sus items."""
     items: List[Dict] = []
     current_category: str = ""
     current_items: List[str] = []
 
     def is_category_line(line: str, next_line: Optional[str]) -> bool:
+        """Heuristica para distinguir linea de categoria vs linea de items."""
         if _is_bullet(line) or _is_heading(line):
             return True
         if current_category and not current_items:
@@ -1105,6 +1134,7 @@ def _parse_skills(lines: List[str]) -> List[Dict]:
 
 
 def _ensure_minimums(data: Dict) -> None:
+    """Garantiza que experience/education/skills tengan al menos una fila."""
     if not data.get("experience"):
         data["experience"] = default_structure()["experience"]
     if not data.get("education"):

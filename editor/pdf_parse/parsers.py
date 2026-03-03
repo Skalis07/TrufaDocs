@@ -19,6 +19,7 @@ HONOR_HINT_RE = re.compile(
 
 
 def _strip_trailing_bullet(text: str) -> str:
+    """Quita un marcador bullet al final de la linea, si existe."""
     stripped = text.strip()
     if stripped and stripped[-1] in BULLET_CHARS:
         return stripped[:-1].strip()
@@ -26,6 +27,7 @@ def _strip_trailing_bullet(text: str) -> str:
 
 
 def _strip_bullet_markers(text: str) -> tuple[str, bool]:
+    """Limpia bullets al inicio/fin y reporta si la linea era bullet."""
     stripped = text.strip()
     if not stripped:
         return text, False
@@ -40,6 +42,7 @@ def _strip_bullet_markers(text: str) -> tuple[str, bool]:
 
 
 def _infer_bullet_indents(raw_lines: list[dict]) -> tuple[float, float]:
+    """Infiere indentacion de bullet y de continuacion por bloque."""
     indents = sorted({float(entry.get("indent", 0.0)) for entry in raw_lines if entry.get("indent", 0.0) > 0})
     if not indents:
         return 0.0, 0.0
@@ -49,6 +52,7 @@ def _infer_bullet_indents(raw_lines: list[dict]) -> tuple[float, float]:
 
 
 def _extract_date_from_line(text: str) -> tuple[str, str]:
+    """Extrae un rango de fecha y retorna (fecha, resto_sin_fecha)."""
     match = DATE_RANGE_RE.search(text) or DATE_RANGE_OPEN_RE.search(text)
     if not match:
         return "", ""
@@ -62,6 +66,7 @@ def _extract_date_from_line(text: str) -> tuple[str, str]:
 
 
 def _split_org_location(text: str) -> tuple[str, str]:
+    """Separa organizacion y ubicacion cuando vienen en una sola linea."""
     if "|" in text:
         parts = [normalize_spaces(part) for part in text.split("|") if normalize_spaces(part)]
         if len(parts) > 1:
@@ -79,6 +84,7 @@ def _split_org_location(text: str) -> tuple[str, str]:
 
 
 def _looks_like_new_org(line: str) -> bool:
+    """Heuristica para detectar si una linea parece inicio de nueva organizacion."""
     if TECH_PREFIX_RE.match(line):
         return False
     if DATE_RANGE_RE.search(line) or DATE_RANGE_OPEN_RE.search(line):
@@ -89,6 +95,7 @@ def _looks_like_new_org(line: str) -> bool:
 
 
 def _looks_like_honor_line(text: str) -> bool:
+    """Detecta lineas de honores/distinciones en educacion."""
     normalized = normalize_spaces(text or "")
     if not normalized:
         return False
@@ -98,12 +105,14 @@ def _looks_like_honor_line(text: str) -> bool:
 
 
 def parse_experience(raw_lines: list[dict]) -> list[dict]:
+    """Parsea lineas de experiencia en bloques con rol, empresa, fechas e items."""
     blocks: list[dict] = []
     current: dict | None = None
     pending_bullet_index: int | None = None
     bullet_indent, continuation_indent = _infer_bullet_indents(raw_lines)
 
     def start_block() -> dict:
+        """Crea un bloque vacio de experiencia."""
         return {
             "org": None,
             "role": None,
@@ -227,10 +236,12 @@ def parse_experience(raw_lines: list[dict]) -> list[dict]:
 
 
 def parse_education(raw_lines: list[dict]) -> list[dict]:
+    """Parsea lineas de educacion en bloques con institucion, programa y fechas."""
     blocks: list[dict] = []
     current: dict | None = None
 
     def start_block() -> dict:
+        """Crea un bloque vacio de educacion."""
         return {
             "org": None,
             "program": None,
@@ -299,6 +310,7 @@ def parse_education(raw_lines: list[dict]) -> list[dict]:
 
 
 def parse_skills(raw_lines: list[dict]) -> list[dict]:
+    """Parsea lineas de skills en grupos categoria -> lista de valores."""
     groups: list[dict] = []
     current: dict | None = None
 

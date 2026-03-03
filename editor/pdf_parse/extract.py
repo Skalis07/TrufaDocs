@@ -14,10 +14,12 @@ from .constants import (
 
 
 def clamp01(value: float) -> float:
+    """Limita un valor flotante al rango [0, 1]."""
     return max(0.0, min(1.0, value))
 
 
 def _median(values: list[float]) -> float:
+    """Calcula la mediana de una lista numerica."""
     if not values:
         return 0.0
     ordered = sorted(values)
@@ -28,6 +30,7 @@ def _median(values: list[float]) -> float:
 
 
 def _most_common(values: list[str]) -> Optional[str]:
+    """Devuelve el string mas frecuente, ignorando vacios."""
     if not values:
         return None
     counts: dict[str, int] = {}
@@ -41,10 +44,12 @@ def _most_common(values: list[str]) -> Optional[str]:
 
 
 def normalize_spaces(text: str) -> str:
+    """Colapsa espacios consecutivos en un solo espacio."""
     return " ".join(text.split())
 
 
 def _join_words_with_columns(words: list[dict]) -> str:
+    """Une palabras por eje X y marca cambios de columna con '|'."""
     if not words:
         return ""
     ordered = sorted(words, key=lambda word: word["x0"])
@@ -71,6 +76,7 @@ def _join_words_with_columns(words: list[dict]) -> str:
 
 
 def calc_uppercase_ratio(text: str) -> float:
+    """Calcula el porcentaje de letras en mayuscula."""
     letters = [char for char in text if char.isalpha()]
     if not letters:
         return 0.0
@@ -79,6 +85,7 @@ def calc_uppercase_ratio(text: str) -> float:
 
 
 def calc_comma_density(text: str) -> float:
+    """Calcula densidad de comas respecto al largo del texto."""
     text = text.strip()
     if not text:
         return 0.0
@@ -86,6 +93,7 @@ def calc_comma_density(text: str) -> float:
 
 
 def strip_bullet_prefix(text: str) -> tuple[str, Optional[str]]:
+    """Quita bullet inicial y devuelve texto limpio mas marcador detectado."""
     stripped = text.lstrip()
     if not stripped:
         return text, None
@@ -122,6 +130,7 @@ class Line:
 
 
 def extract_lines(file_obj) -> list[Line]:
+    """Extrae lineas desde PDF con posicion, tipografia y reglas horizontales."""
     try:
         import pdfplumber  # type: ignore
     except Exception as exc:
@@ -144,6 +153,7 @@ def extract_lines(file_obj) -> list[Line]:
             page_lines: list[Line] = []
 
             def flush() -> None:
+                """Cierra la linea en curso y agrega un objeto Line a page_lines."""
                 nonlocal current
                 if not current:
                     return
@@ -211,6 +221,7 @@ def extract_lines(file_obj) -> list[Line]:
 
 
 def enrich_features(lines: list[Line]) -> None:
+    """Enriquece lineas con features derivadas para deteccion de secciones."""
     if not lines:
         return
     per_page_min_x0: dict[int, float] = {}

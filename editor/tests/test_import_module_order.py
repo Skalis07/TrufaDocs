@@ -1,3 +1,5 @@
+"""Pruebas de integracion para preservar orden de modulos al importar."""
+
 import io
 from unittest.mock import patch
 
@@ -8,7 +10,10 @@ from editor.structure import parse_resume
 
 
 class ImportModuleOrderTests(SimpleTestCase):
+    """Asegura que la estructura importada mantenga orden core/extra detectado."""
+
     def test_parse_resume_preserves_detected_module_order_with_extra_between_core_sections(self) -> None:
+        """Importar texto debe conservar extras ubicadas entre modulos core."""
         text = """
 Persona Ejemplo
 Perfil profesional
@@ -35,6 +40,7 @@ Python, SQL
         self.assertEqual(core_order, "experience,extra-0,education,skills")
 
     def test_parse_pdf_preserves_detected_module_order_with_extra_between_core_sections(self) -> None:
+        """Importar PDF debe respetar el orden cuando hay un extra al medio."""
         assembled = {
             "header": {
                 "name": "Persona Ejemplo",
@@ -75,6 +81,7 @@ Python, SQL
         self.assertEqual(core_order, "experience,extra-0,education,skills")
 
     def test_parse_pdf_recognizes_english_core_titles_as_core_sections(self) -> None:
+        """Titulos core en ingles no deben clasificarse por error como extras."""
         assembled = {
             "header": {
                 "name": "Sample Candidate",

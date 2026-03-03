@@ -16,7 +16,6 @@ from django.views.decorators.http import require_http_methods
 from docx import Document as DocxDocument
 from .pdf_parse import parse_pdf_to_structure
 from .structure import (
-    build_text_from_structure,
     default_structure,
     parse_resume,
     structure_from_post,
@@ -93,6 +92,12 @@ UI_MESSAGES = {
 
 
 def _ui_lang(request) -> str:
+    """Resuelve el idioma de la UI desde la request.
+
+    Prioriza el valor enviado por POST (formularios) y, si no existe,
+    usa el valor en querystring (GET). Solo acepta "en"; cualquier
+    otro valor cae a "es" para mantener un default estable.
+    """
     raw = ""
     if getattr(request, "method", "") == "POST":
         raw = request.POST.get("ui_lang", "")
@@ -102,6 +107,13 @@ def _ui_lang(request) -> str:
 
 
 def _msg(request, key: str, **kwargs) -> str:
+    """Busca un mensaje de UI por clave y lo formatea.
+
+    1) Elige idioma con _ui_lang.
+    2) Busca la clave en ese idioma.
+    3) Si no existe, usa el fallback en espanol.
+    4) Si hay kwargs, intenta formatear placeholders.
+    """
     lang = _ui_lang(request)
     template = UI_MESSAGES.get(lang, UI_MESSAGES["es"]).get(key) or UI_MESSAGES["es"].get(key) or key
     if not kwargs:
@@ -113,6 +125,12 @@ def _msg(request, key: str, **kwargs) -> str:
 
 
 def _translate_backend_error(request, message: str | None) -> str | None:
+    """Traduce errores tecnicos del backend a mensajes aptos para UI.
+
+    Convierte mensajes exactos o por prefijo a claves de UI_MESSAGES.
+    Si no puede mapear el error, devuelve el texto original para no
+    perder detalle diagnostico.
+    """
     if not message:
         return message
     text = str(message).strip()
@@ -145,13 +163,18 @@ def _translate_backend_error(request, message: str | None) -> str | None:
     return text
 
 def _extract_structured_countries(structured: dict | None) -> list[str]:
-    # Recoge paises desde la estructura para que se muestren en el selector.
+    """Extrae paises ya presentes en la estructura del CV.
+
+    Se usa para poblar selects de pais sin obligar al usuario a escribir
+    de nuevo valores que ya venian detectados en experiencia/educacion/extras.
+    """
     countries: list[str] = []
 
     if not isinstance(structured, dict):
         structured = {}
 
     def add(country: str | None) -> None:
+        """Agrega un pais no vacio a la lista temporal."""
         if not country:
             return
         country_clean = country.strip()
@@ -173,6 +196,7 @@ def _extract_structured_countries(structured: dict | None) -> list[str]:
 
 
 def _merge_country_choices(base: list[str], extra: list[str]) -> list[str]:
+    """Combina lista base + lista detectada sin duplicados (case-insensitive)."""
     merged = list(base)
     seen = {c.strip().lower() for c in merged if c}
     for country in extra:
@@ -184,7 +208,11 @@ def _merge_country_choices(base: list[str], extra: list[str]) -> list[str]:
 
 
 def index(request):
-    # Estado inicial: formulario con estructura vacia
+    """Vista principal del editor.
+
+    Carga el formulario con una estructura minima vacia para comenzar
+    desde cero cuando el usuario entra por primera vez.
+    """
     structured = default_structure()
     return _render_text_editor(request, structured, filename="documento")
 # --------------------
@@ -195,6 +223,14 @@ def index(request):
 
 @require_http_methods(["GET", "POST"])
 def text_upload(request):
+    """Procesa upload de CV (.docx o .pdf) y llena el editor.
+
+    Flujo:
+    - valida metodo/archivo/tamano/formato
+    - extrae texto/estructura segun extension
+    - transforma a estructura interna
+    - renderiza editor con los datos detectados
+    """
     if request.method == "GET":
         return redirect("index")
 
@@ -228,55 +264,45 @@ def text_upload(request):
 
 @require_http_methods(["POST"])
 def export_docx(request):
-    raw_text = request.POST.get("text", "")
-    use_structured = request.POST.get("use_structured") == "1"
-    if use_structured:
-        # Exporta usando la estructura (plantilla DOCX)
-        structured = structure_from_post(request.POST)
-        template_path = _template_path()
-        font_choice = _selected_font(request)
-        if not template_path:
-            return _render_text_editor(
-                request,
-                structured,
-                filename=_safe_filename(request.POST.get("filename", "documento")),
-                error=_msg(request, "export_template_not_found"),
-            )
-        try:
-            rendered = render_from_template(
-                structured,
-                template_path,
-                font_name=font_choice,
-                ui_lang=_ui_lang(request),
-            )
-        except Exception as exc:
-            detail = str(exc).strip()
-            if len(detail) > 400:
-                detail = detail[:400].rstrip() + "..."
-            return _render_text_editor(
-                request,
-                structured,
-                filename=_safe_filename(request.POST.get("filename", "documento")),
-                error=_msg(
-                    request,
-                    "export_docx_template_failed",
-                    detail=detail or _msg(request, "unknown_error"),
-                ),
-            )
-        filename = _safe_filename(request.POST.get("filename", "documento"))
-        response = HttpResponse(
-            rendered,
-            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
-        response["Content-Disposition"] = f'attachment; filename="{filename}.docx"'
-        return response
-    else:
-        # Exporta el texto libre (columna derecha)
-        text = raw_text
+    """Exporta el CV estructurado a DOCX usando plantilla.
+
+    Lee los campos del formulario, renderiza la plantilla DOCX con la
+    estructura actual y devuelve un archivo descargable. Si algo falla,
+    vuelve al editor mostrando un error legible.
+    """
+    # Exporta usando la estructura (plantilla DOCX)
+    structured = structure_from_post(request.POST)
+    template_path = _template_path()
+    font_choice = _selected_font(request)
     filename = _safe_filename(request.POST.get("filename", "documento"))
-
-    docx_bytes = _build_docx_bytes(text)
-
+    if not template_path:
+        return _render_text_editor(
+            request,
+            structured,
+            filename=filename,
+            error=_msg(request, "export_template_not_found"),
+        )
+    try:
+        docx_bytes = render_from_template(
+            structured,
+            template_path,
+            font_name=font_choice,
+            ui_lang=_ui_lang(request),
+        )
+    except Exception as exc:
+        detail = str(exc).strip()
+        if len(detail) > 400:
+            detail = detail[:400].rstrip() + "..."
+        return _render_text_editor(
+            request,
+            structured,
+            filename=filename,
+            error=_msg(
+                request,
+                "export_docx_template_failed",
+                detail=detail or _msg(request, "unknown_error"),
+            ),
+        )
     response = HttpResponse(
         docx_bytes,
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -287,43 +313,40 @@ def export_docx(request):
 
 @require_http_methods(["POST"])
 def export_pdf(request):
-    raw_text = request.POST.get("text", "")
-    use_structured = request.POST.get("use_structured") == "1"
-    filename = _safe_filename(request.POST.get("filename", "documento"))
+    """Exporta el CV estructurado a PDF.
 
-    if use_structured:
-        # PDF desde estructura -> DOCX -> PDF
-        structured = structure_from_post(request.POST)
-        template_path = _template_path()
-        font_choice = _selected_font(request)
-        if not template_path:
-            return _render_text_editor(
-                request,
-                structured,
-                filename=filename,
-                error=_msg(request, "export_template_not_found"),
-            )
-        try:
-            rendered_docx = render_from_template(
-                structured,
-                template_path,
-                font_name=font_choice,
-                ui_lang=_ui_lang(request),
-            )
-        except Exception:
-            rendered_docx = None
-        if not rendered_docx:
-            return _render_text_editor(
-                request,
-                structured,
-                filename=filename,
-                error=_msg(request, "export_docx_template_failed_generic"),
-            )
-        docx_bytes = rendered_docx
-    else:
-        # PDF desde texto libre
-        structured = default_structure()
-        docx_bytes = _build_docx_bytes(raw_text)
+    Primero genera un DOCX desde plantilla y luego lo convierte a PDF
+    con docx2pdf. Si falla cualquier paso, vuelve al editor con mensaje
+    de error traducido.
+    """
+    structured = structure_from_post(request.POST)
+    filename = _safe_filename(request.POST.get("filename", "documento"))
+    # PDF desde estructura -> DOCX -> PDF
+    template_path = _template_path()
+    font_choice = _selected_font(request)
+    if not template_path:
+        return _render_text_editor(
+            request,
+            structured,
+            filename=filename,
+            error=_msg(request, "export_template_not_found"),
+        )
+    try:
+        docx_bytes = render_from_template(
+            structured,
+            template_path,
+            font_name=font_choice,
+            ui_lang=_ui_lang(request),
+        )
+    except Exception:
+        docx_bytes = None
+    if not docx_bytes:
+        return _render_text_editor(
+            request,
+            structured,
+            filename=filename,
+            error=_msg(request, "export_docx_template_failed_generic"),
+        )
 
     pdf_bytes, error = _convert_docx_bytes_to_pdf(docx_bytes)
     if pdf_bytes:
@@ -344,6 +367,11 @@ def export_pdf(request):
 
 
 def _render_text_editor(request, structured, filename="documento", error: str | None = None):
+    """Render central del template del editor.
+
+    Arma el contexto completo de UI (estructura, idioma, fuentes, anos,
+    paises y errores) para no duplicar logica en cada vista.
+    """
     # Render principal con datos de la UI
     font_choice = _selected_font(request)
     extra_countries = _extract_structured_countries(structured)
@@ -352,7 +380,6 @@ def _render_text_editor(request, structured, filename="documento", error: str | 
         request,
         "editor/editor.html",
         {
-            "text": build_text_from_structure(structured),
             "filename": filename,
             "structured": structured,
             "error": error,
@@ -366,42 +393,46 @@ def _render_text_editor(request, structured, filename="documento", error: str | 
 
 
 def _text_error(request, message: str):
+    """Atajo para mostrar un error en editor con estructura base."""
     structured = default_structure()
     return _render_text_editor(request, structured, filename="documento", error=message)
 
 
 def _is_allowed_extension(filename: str) -> bool:
+    """Valida si la extension del archivo esta permitida para upload."""
     ext = _extension(filename)
     return ext in ALLOWED_EXTENSIONS
 
 
 def _max_upload_mb() -> int:
+    """Obtiene el limite maximo de upload en MB desde settings."""
     return int(getattr(settings, "MAX_UPLOAD_MB", 25))
 
 
 def _extension(name: str) -> str:
+    """Devuelve la extension de archivo en minusculas (ej: .pdf)."""
     return os.path.splitext(name)[1].lower()
 
 
 def _safe_filename(name: str) -> str:
+    """Genera nombre de archivo seguro para descargas.
+
+    Quita directorios, aplica slugify y limita largo para evitar nombres
+    problematicos en distintos sistemas operativos.
+    """
     base = os.path.splitext(os.path.basename(name))[0] or "documento"
     safe = slugify(base)
     return safe[:80] or "documento"
 
 
-def _build_docx_bytes(text: str) -> bytes:
-    # DOCX basico para exportaciones sin plantilla
-    buffer = io.BytesIO()
-    doc = DocxDocument()
-    for line in text.splitlines():
-        doc.add_paragraph(line)
-    if not text.strip():
-        doc.add_paragraph("")
-    doc.save(buffer)
-    return buffer.getvalue()
-
-
 def _extract_docx_text(file_obj) -> tuple[str, str | None]:
+    """Extrae texto legible de un archivo DOCX.
+
+    Estrategia:
+    1) lectura normal con python-docx (parrafos y tablas)
+    2) si no hay texto, fallback al XML interno del .docx
+    Retorna (texto, error). Si hay error, texto viene vacio.
+    """
     # Extrae texto de un .docx (usa python-docx)
     raw = file_obj.read()
     if not raw:
@@ -473,6 +504,11 @@ def _extract_docx_text(file_obj) -> tuple[str, str | None]:
 
 
 def _template_path() -> Path | None:
+    """Resuelve ruta de plantilla DOCX valida para exportar.
+
+    Primero intenta CV_TEMPLATE_PATH (settings/.env). Si no existe,
+    usa templates/cv_template.docx. Si ninguna ruta es valida, retorna None.
+    """
     # Ruta de plantilla definida por .env o default
     env_path = getattr(settings, "CV_TEMPLATE_PATH", "").strip()
     if env_path:
@@ -489,6 +525,11 @@ def _template_path() -> Path | None:
 
 
 def _selected_font(request) -> str:
+    """Lee y valida la fuente seleccionada desde el formulario.
+
+    Solo acepta valores definidos en FONT_CHOICES para evitar entradas
+    arbitrarias y mantener consistencia en la plantilla.
+    """
     # Solo valida fuentes permitidas
     if request.method != "POST":
         return ""
@@ -501,11 +542,22 @@ def _selected_font(request) -> str:
 
 
 def _normalize_key(text: str) -> str:
+    """Normaliza texto para comparaciones flexibles.
+
+    Elimina acentos, pasa a minusculas y recorta espacios para poder
+    deduplicar contenido similar con distinta acentuacion.
+    """
     normalized = unicodedata.normalize("NFKD", text)
     return "".join(char for char in normalized if not unicodedata.combining(char)).lower().strip()
 
 
 def _convert_docx_bytes_to_pdf(docx_bytes: bytes) -> tuple[bytes | None, str | None]:
+    """Convierte bytes de DOCX a bytes de PDF usando docx2pdf.
+
+    Guarda temporalmente el DOCX, ejecuta conversion y lee el PDF
+    generado. Devuelve (pdf_bytes, error). Si falla, pdf_bytes sera None
+    y error tendra un mensaje apto para mostrar en UI.
+    """
     # Convierte DOCX a PDF usando docx2pdf (requiere Word instalado)
     try:
         from docx2pdf import convert as docx2pdf_convert

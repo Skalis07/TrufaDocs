@@ -1,3 +1,5 @@
+"""Pruebas de espaciado/orden visual alrededor de extras en salida DOCX."""
+
 import io
 import unicodedata
 from pathlib import Path
@@ -7,18 +9,23 @@ from docx import Document as DocxDocument
 
 from editor.docx_template import render_from_template
 
+TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "templates" / "cv_template.docx"
+
 
 def _row_text(row) -> str:
+    """Devuelve el texto de una fila en formato plano para comparar."""
     return " ".join(cell.text for cell in row.cells if cell.text).strip()
 
 
 def _normalize(value: str) -> str:
+    """Normaliza acentos/case para comparar titulos de forma confiable."""
     decomposed = unicodedata.normalize("NFD", value or "")
     without_marks = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
     return " ".join(without_marks.upper().split())
 
 
 def _find_heading_index(table, heading: str) -> int | None:
+    """Encuentra el indice de fila donde aparece un titulo especifico."""
     target = _normalize(heading)
     for idx, row in enumerate(table.rows):
         if target in _normalize(_row_text(row)):
@@ -27,8 +34,10 @@ def _find_heading_index(table, heading: str) -> int | None:
 
 
 class ModuleOrderSpacingTests(SimpleTestCase):
+    """Verifica espaciado y orden cuando hay extras entre secciones core."""
+
     def test_extra_between_experience_and_education_keeps_separator(self) -> None:
-        template_path = Path(__file__).resolve().parents[2] / "templates" / "cv_template.docx"
+        """Education debe conservar una fila separadora vacia justo antes."""
         structured = {
             "basics": {
                 "name": "Test User",
@@ -75,7 +84,7 @@ class ModuleOrderSpacingTests(SimpleTestCase):
             "meta": {"core_order": "experience,extra-1,education,skills"},
         }
 
-        output = render_from_template(structured, template_path)
+        output = render_from_template(structured, TEMPLATE_PATH)
         doc = DocxDocument(io.BytesIO(output))
         table = doc.tables[0]
 

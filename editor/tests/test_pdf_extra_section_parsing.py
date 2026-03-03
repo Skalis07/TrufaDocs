@@ -1,3 +1,5 @@
+"""Pruebas de parseo de secciones extra de PDF hacia formas estables."""
+
 from django.test import SimpleTestCase
 
 from editor.pdf_parse.bridge import _parse_extra_section
@@ -10,6 +12,7 @@ def _line(
     is_bullet: bool = False,
     is_bold: bool = False,
 ) -> dict:
+    """Construye una linea sintetica con el formato esperado por el parser."""
     return {
         "text": text,
         "indent": indent,
@@ -21,7 +24,10 @@ def _line(
 
 
 class PdfExtraSectionParsingTests(SimpleTestCase):
+    """Cubre deteccion de forma y parseo para secciones no core del PDF."""
+
     def test_project_like_extra_prefers_experience_shape(self) -> None:
+        """Entradas tipo proyecto con rol/fecha deben mapear a modo detailed."""
         raw_lines = [
             _line("Example Labs | Remoto", is_bold=True),
             _line("Desarrollador | Nov 2025 – Ene 2026"),
@@ -47,6 +53,7 @@ class PdfExtraSectionParsingTests(SimpleTestCase):
         self.assertGreaterEqual(len(entries[0].get("items") or []), 1)
 
     def test_bullet_only_extra_keeps_subtitle_items_mode(self) -> None:
+        """Secciones con solo bullets deben conservar modo subtitle_items."""
         raw_lines = [
             _line("AWS Cloud Practitioner", is_bullet=True, indent=14),
             _line("Scrum Fundamentals Certified", is_bullet=True, indent=14),
@@ -61,6 +68,7 @@ class PdfExtraSectionParsingTests(SimpleTestCase):
         self.assertEqual(entries[1].get("subtitle"), "Scrum Fundamentals Certified")
 
     def test_projects_title_in_english_prefers_experience_shape(self) -> None:
+        """Titulos en ingles de proyectos deben activar parseo detailed igual."""
         raw_lines = [
             _line("Example Labs | Remote", is_bold=True),
             _line("Developer | Nov 2025 – Jan 2026"),

@@ -1,3 +1,5 @@
+"""Pruebas del flag keep_with_next en categorias de habilidades renderizadas."""
+
 import io
 import unicodedata
 from pathlib import Path
@@ -7,18 +9,23 @@ from docx import Document as DocxDocument
 
 from editor.docx_template import render_from_template
 
+TEMPLATE_PATH = Path(__file__).resolve().parents[2] / "templates" / "cv_template.docx"
+
 
 def _normalize(value: str) -> str:
+    """Normaliza texto para comparar titulos sin depender de acentos o mayusculas."""
     decomposed = unicodedata.normalize("NFD", value or "")
     without_marks = "".join(ch for ch in decomposed if unicodedata.category(ch) != "Mn")
     return " ".join(without_marks.upper().split())
 
 
 def _row_text(row) -> str:
+    """Devuelve el texto visible de una fila como un unico string comparable."""
     return " ".join(cell.text for cell in row.cells if cell.text).strip()
 
 
 def _find_heading_index(table, heading: str) -> int | None:
+    """Busca el primer indice de fila que contiene el titulo indicado."""
     target = _normalize(heading)
     for idx, row in enumerate(table.rows):
         if target in _normalize(_row_text(row)):
@@ -27,6 +34,7 @@ def _find_heading_index(table, heading: str) -> int | None:
 
 
 def _find_next_non_empty_row_index(table, start_idx: int) -> int | None:
+    """Obtiene la siguiente fila no vacia despues de un titulo."""
     for idx in range(start_idx, len(table.rows)):
         if _row_text(table.rows[idx]):
             return idx
@@ -34,8 +42,10 @@ def _find_next_non_empty_row_index(table, start_idx: int) -> int | None:
 
 
 class SkillsPaginationTests(SimpleTestCase):
+    """Valida reglas de paginacion de parrafos dentro del modulo skills."""
+
     def test_skill_categories_only_keep_with_next_from_second_category(self) -> None:
-        template_path = Path(__file__).resolve().parents[2] / "templates" / "cv_template.docx"
+        """Solo categorias desde la segunda deben marcarse con keep_with_next=True."""
         structured = {
             "basics": {
                 "name": "Test User",
@@ -84,7 +94,7 @@ class SkillsPaginationTests(SimpleTestCase):
             "meta": {"core_order": "experience,education,skills"},
         }
 
-        output = render_from_template(structured, template_path)
+        output = render_from_template(structured, TEMPLATE_PATH)
         doc = DocxDocument(io.BytesIO(output))
         table = doc.tables[0]
 

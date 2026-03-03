@@ -67,15 +67,22 @@ EXPORT_TEXT = {
 _EXPORT_UI_LANG: ContextVar[str] = ContextVar("docx_export_ui_lang", default="es")
 
 
+# --------------------
+# Contexto e i18n de exportacion
+# --------------------
+
 def _normalize_ui_lang(value: str | None) -> str:
+    """Normaliza el idioma de exportacion y garantiza solo "es" o "en"."""
     return "en" if str(value or "").strip().lower() == "en" else "es"
 
 
 def _export_text() -> dict[str, Any]:
+    """Devuelve el bundle de textos localizado segun el idioma activo en contexto."""
     return EXPORT_TEXT[_normalize_ui_lang(_EXPORT_UI_LANG.get())]
 
 
 def _format_detail_line(value: str | None) -> str:
+    """Limpia una linea de detalle opcional antes de renderizarla en DOCX."""
     detail = (value or "").strip()
     return detail
 
@@ -95,9 +102,14 @@ def _normalize_extra_mode(value: str | None, default: str = "subtitles") -> str:
 
 
 def _entry_items_inline(entry: dict) -> str:
+    """Convierte la lista de items de una entrada extra a una sola linea con comas."""
     items = [str(item).strip() for item in (entry.get("items") or []) if str(item).strip()]
     return ", ".join(items)
 
+
+# --------------------
+# Pipeline principal de render DOCX
+# --------------------
 
 def render_from_template(
     structured: dict,
@@ -106,6 +118,7 @@ def render_from_template(
     ui_lang: str | None = None,
 ) -> bytes:
     # Carga la plantilla DOCX y reemplaza secciones con la data estructurada
+    """Pipeline principal: carga plantilla DOCX, rellena secciones y devuelve bytes del documento final."""
     lang_token = _EXPORT_UI_LANG.set(_normalize_ui_lang(ui_lang))
     try:
         doc = DocxDocument(str(template_path))
@@ -187,6 +200,7 @@ def render_from_template(
 
 def _apply_experience(table, exp_header_idx: int, edu_header_idx: int, experience: list[dict]) -> None:
     # Inserta bloques de experiencia usando filas template
+    """Renderiza el bloque de experiencia clonando filas plantilla y completando datos por item."""
     exp_role_idx = _find_next_non_empty_row(table, exp_header_idx + 1, edu_header_idx)
     exp_high_idx = _find_next_non_empty_row(table, (exp_role_idx or exp_header_idx) + 1, edu_header_idx)
     if exp_role_idx is None or exp_high_idx is None:
@@ -246,6 +260,7 @@ def _apply_experience(table, exp_header_idx: int, edu_header_idx: int, experienc
 
 def _apply_education(table, edu_header_idx: int, skills_header_idx: int, education: list[dict]) -> None:
     # Inserta bloques de educacion usando filas template
+    """Renderiza el bloque de educacion clonando filas plantilla y completando datos por item."""
     edu_template_idx = _find_next_non_empty_row(table, edu_header_idx + 1, skills_header_idx)
     if edu_template_idx is None:
         return
@@ -293,6 +308,7 @@ def _apply_education(table, edu_header_idx: int, skills_header_idx: int, educati
 
 def _apply_skills(table, skills_header_idx: int, skills: list[dict]) -> int | None:
     # Rellena la celda de habilidades respetando estilos
+    """Rellena la seccion de habilidades preservando estilos base y estructura visual de la plantilla."""
     skills_content_idx = _find_next_non_empty_row(table, skills_header_idx + 1, None)
     if skills_content_idx is None:
         return None
@@ -377,6 +393,7 @@ def _normalize_skills_bullets(
     size_pt: int = 11,
 ) -> None:
     # Ajusta tamaño de la lista numerada/bullets en habilidades
+    """Fuerza tamano de bullets/numeracion en habilidades para mantener consistencia tipografica."""
     if skills_content_idx is None:
         return
     row = table.rows[skills_content_idx]
@@ -445,6 +462,7 @@ def _extra_entry_lines(entry: dict, *, mode: str = "detailed") -> list[str]:
 
 
 def _extra_entry_has_content(entry: dict) -> bool:
+    """Determina si una entrada extra contiene informacion real para exportar."""
     if not entry:
         return False
     fields = [
@@ -473,6 +491,7 @@ def _apply_extras(
     # Soporta modo por ENTRADA (entry["mode"]) para permitir mezclar dentro de una misma sección.
     # Compatibilidad:
     # - si no hay entry.mode, cae en extra.mode o "items".
+    """Inserta secciones extra despues de habilidades soportando modos por entrada y compatibilidad historica."""
     if skills_content_idx is None or not extras:
         return []
 
@@ -622,6 +641,7 @@ def _apply_extras(
 
 def _apply_module_order(table, structured: dict, extra_blocks: list[dict[str, Any]]) -> None:
     # Respeta el orden de módulos de la UI (core_order): experience, education, skills, extra-*
+    """Reordena modulos en tabla segun core_order enviado por la UI (incluyendo extras)."""
     meta = structured.get("meta") or {}
     raw_order = str(meta.get("core_order") or "").strip()
     if not raw_order:
@@ -747,7 +767,13 @@ def _apply_module_order(table, structured: dict, extra_blocks: list[dict[str, An
                 _clear_row_height(table.rows[cursor])
                 cursor += 1
 
+
+# --------------------
+# Fillers de filas y celdas por modulo
+# --------------------
+
 def _fill_experience_role_row(row, item: dict) -> None:
+    """Completa la fila de rol/empresa en experiencia con columna izquierda y metadatos a la derecha."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -769,6 +795,7 @@ def _fill_experience_role_row(row, item: dict) -> None:
 
 
 def _fill_extra_detail_role_row(row, entry: dict) -> None:
+    """Completa una fila de extra detallado usando formato similar al de experiencia."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -798,6 +825,7 @@ def _fill_extra_detail_role_row(row, entry: dict) -> None:
 
 
 def _fill_extra_detail_highlights_row(row, items: list[str]) -> None:
+    """Escribe los items/hitos de un extra detallado en su fila de highlights."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -807,6 +835,7 @@ def _fill_extra_detail_highlights_row(row, items: list[str]) -> None:
 
 
 def _fill_experience_highlights_row(row, item: dict) -> None:
+    """Escribe highlights de experiencia en la fila de detalle correspondiente."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -817,6 +846,7 @@ def _fill_experience_highlights_row(row, item: dict) -> None:
 
 
 def _fill_education_row(row, item: dict) -> None:
+    """Completa fila de educacion (institucion, grado, honores, ubicacion y fechas)."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -838,6 +868,7 @@ def _fill_education_row(row, item: dict) -> None:
 
 
 def _fill_extra_row(row, items: list[str]) -> None:
+    """Escribe lineas de una entrada extra en formato de una sola columna."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -848,6 +879,7 @@ def _fill_extra_row(row, items: list[str]) -> None:
 
 def _set_contact_row(row, basics: dict) -> None:
     # Construye la fila de contacto con enlaces clickeables
+    """Construye la fila de contacto con texto y enlaces clickeables preservando estilo base."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -909,8 +941,13 @@ def _set_contact_row(row, basics: dict) -> None:
         _add_run_with_size(paragraph, "", run_template, size_pt=10)
 
 
+# --------------------
+# Helpers de texto, links y fechas
+# --------------------
+
 def _normalize_url(value: str) -> str:
     # Asegura que el link tenga protocolo
+    """Asegura que una URL tenga protocolo para que el hyperlink en DOCX sea valido."""
     raw = value.strip()
     if not raw:
         return raw
@@ -920,6 +957,7 @@ def _normalize_url(value: str) -> str:
 
 
 def _add_run_with_size(paragraph, text: str, run_template=None, *, size_pt: int | None = None):
+    """Agrega un run al parrafo clonando formato plantilla y ajustando tamano opcional."""
     run = paragraph.add_run(text)
     _clone_run_format(run_template, run)
     if size_pt is not None:
@@ -936,6 +974,7 @@ def _add_hyperlink(
     size_pt: int | None = None,
 ) -> None:
     # Inserta un hyperlink con estilo similar al template
+    """Inserta hyperlink DOCX (OOXML) conservando estilo visual compatible con la plantilla."""
     if not url:
         _add_run_with_size(paragraph, text, run_template, size_pt=size_pt)
         return
@@ -960,6 +999,7 @@ def _add_hyperlink(
 
 
 def _format_date_range(start: str | None, end: str | None) -> str:
+    """Formatea rango de fechas para salida DOCX usando etiquetas localizadas."""
     start = _format_date_token(start)
     end = _format_date_token(end)
     if start and end:
@@ -972,6 +1012,7 @@ def _format_date_range(start: str | None, end: str | None) -> str:
 
 
 def _format_date_token(value: str | None) -> str:
+    """Formatea token de fecha interno (YYYY-MM) a etiqueta legible por idioma."""
     value = (value or "").strip()
     if not value:
         return ""
@@ -983,12 +1024,14 @@ def _format_date_token(value: str | None) -> str:
 
 
 def _join_location(city: str | None, country: str | None) -> str:
+    """Une ciudad y pais en una sola cadena de ubicacion."""
     city = (city or "").strip()
     country = (country or "").strip()
     return ", ".join([part for part in [city, country] if part])
 
 
 def _set_row_text(row, text: str) -> None:
+    """Escribe texto limpio en la primera celda util de una fila."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -997,6 +1040,7 @@ def _set_row_text(row, text: str) -> None:
 
 
 def _has_experience_content(item: dict) -> bool:
+    """Valida si un item de experiencia tiene contenido suficiente para renderizarse."""
     if not item:
         return False
     fields = [
@@ -1015,6 +1059,7 @@ def _has_experience_content(item: dict) -> bool:
 
 
 def _has_education_content(item: dict) -> bool:
+    """Valida si un item de educacion tiene contenido suficiente para renderizarse."""
     if not item:
         return False
     fields = [
@@ -1029,7 +1074,12 @@ def _has_education_content(item: dict) -> bool:
     return any((str(value).strip() for value in fields if value is not None))
 
 
+# --------------------
+# Manipulacion de filas/parrafos OOXML
+# --------------------
+
 def _set_row_keep_with_next(row, value: bool = True) -> None:
+    """Aplica keep_with_next a todos los parrafos de la fila para controlar saltos de pagina."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -1039,6 +1089,7 @@ def _set_row_keep_with_next(row, value: bool = True) -> None:
 
 
 def _clear_row_height(row) -> None:
+    """Elimina altura fija de una fila para dejar que Word ajuste alto automaticamente."""
     tr_pr = row._tr.trPr
     if tr_pr is None:
         return
@@ -1048,6 +1099,7 @@ def _clear_row_height(row) -> None:
 
 
 def _apply_section_keep_with_next_gap(table, header_idx: int) -> None:
+    """Aplica keep_with_next a la fila en blanco que separa encabezado y contenido de seccion."""
     gap_idx = header_idx + 1
     if gap_idx < len(table.rows) and _is_blank_row(table.rows[gap_idx]):
         _set_row_keep_with_next(table.rows[gap_idx])
@@ -1055,6 +1107,7 @@ def _apply_section_keep_with_next_gap(table, header_idx: int) -> None:
 
 
 def _set_cell_lines_preserve(cell, lines: list[str], *, trim_extra_paragraphs: bool = False) -> None:
+    """Escribe multiples lineas en una celda preservando estilos y numeracion existentes."""
     paragraphs = list(cell.paragraphs)
     template_paragraphs = list(paragraphs)
     if not paragraphs:
@@ -1069,6 +1122,7 @@ def _set_cell_lines_preserve(cell, lines: list[str], *, trim_extra_paragraphs: b
             break
 
     def pick_template(index: int):
+        """Selecciona el parrafo plantilla apropiado para una linea segun indice solicitado."""
         if not template_paragraphs:
             return None
         if index < len(template_paragraphs):
@@ -1104,6 +1158,7 @@ def _set_cell_lines_preserve(cell, lines: list[str], *, trim_extra_paragraphs: b
 
 
 def _set_paragraph_text(paragraph, text: str, run_template=None) -> None:
+    """Reemplaza el texto de un parrafo manteniendo formato base del run plantilla."""
     if run_template is None and paragraph.runs:
         run_template = paragraph.runs[0]
     _clear_paragraph_content(paragraph)
@@ -1112,11 +1167,13 @@ def _set_paragraph_text(paragraph, text: str, run_template=None) -> None:
 
 
 def _clear_cell(cell) -> None:
+    """Elimina todos los parrafos actuales de una celda."""
     for paragraph in list(cell.paragraphs):
         paragraph._element.getparent().remove(paragraph._element)
 
 
 def _clear_paragraph_content(paragraph) -> None:
+    """Limpia contenido de un parrafo sin eliminar sus propiedades (pPr)."""
     p = paragraph._p
     for child in list(p):
         if child.tag == qn("w:pPr"):
@@ -1125,6 +1182,7 @@ def _clear_paragraph_content(paragraph) -> None:
 
 
 def _paragraph_has_numbering(paragraph) -> bool:
+    """Indica si un parrafo tiene configuracion de numeracion/lista."""
     ppr = paragraph._p.pPr
     return ppr is not None and ppr.numPr is not None
 
@@ -1138,6 +1196,7 @@ def _add_paragraph(
     run_template=None,
     paragraph_template=None,
 ):
+    """Agrega un parrafo en celda clonando formato de parrafo/run y texto inicial."""
     paragraph = cell.add_paragraph()
     if paragraph_template is not None:
         _clone_paragraph_format(paragraph_template, paragraph)
@@ -1151,6 +1210,7 @@ def _add_paragraph(
 
 
 def _filter_empty_lines(lines: list[str]) -> list[str]:
+    """Limpia lista de lineas removiendo vacios y asegurando al menos una linea."""
     cleaned = []
     for line in lines or []:
         if line is None:
@@ -1162,6 +1222,7 @@ def _filter_empty_lines(lines: list[str]) -> list[str]:
 
 
 def _clone_run_format(source, target) -> None:
+    """Copia formato visual de un run origen a un run destino."""
     if source is None:
         return
     target.bold = source.bold
@@ -1175,6 +1236,7 @@ def _clone_run_format(source, target) -> None:
 
 
 def _clone_paragraph_format(source, target) -> None:
+    """Copia propiedades de formato de un parrafo origen a otro destino."""
     if source is None:
         return
     source_p = source._p
@@ -1187,6 +1249,7 @@ def _clone_paragraph_format(source, target) -> None:
 
 
 def _set_numbering_level_size(doc: DocxDocumentType, num_id: str, ilvl: str, size_pt: int) -> None:
+    """Ajusta tamano de fuente en un nivel de numeracion dentro del XML de numbering."""
     numbering = doc.part.numbering_part.element
     ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 
@@ -1230,8 +1293,13 @@ def _set_numbering_level_size(doc: DocxDocumentType, num_id: str, ilvl: str, siz
         el.set(qn("w:val"), size_val)
 
 
+# --------------------
+# Fuente global y navegacion de tabla
+# --------------------
+
 def _apply_font(doc: DocxDocumentType, font_name: str | None) -> None:
     # Aplica la misma fuente a todo el documento
+    """Aplica una fuente global a runs de parrafos y tablas en todo el documento."""
     if not font_name:
         return
     for paragraph in doc.paragraphs:
@@ -1246,6 +1314,7 @@ def _apply_font(doc: DocxDocumentType, font_name: str | None) -> None:
 
 
 def _set_run_font_name(run, font_name: str) -> None:
+    """Define nombre de fuente en run y en todos los slots rFonts OOXML."""
     run.font.name = font_name
     rpr = run._element.get_or_add_rPr()
     rfonts = rpr.rFonts
@@ -1259,6 +1328,7 @@ def _set_run_font_name(run, font_name: str) -> None:
 
 
 def _unique_cells(row) -> list:
+    """Devuelve celdas unicas reales de una fila evitando duplicados por merged cells."""
     seen = set()
     unique = []
     for cell in row.cells:
@@ -1271,10 +1341,12 @@ def _unique_cells(row) -> list:
 
 
 def _row_text(row) -> str:
+    """Concatena texto visible de todas las celdas de una fila."""
     return " ".join(cell.text for cell in row.cells if cell.text)
 
 
 def _row_is_heading(text: str) -> bool:
+    """Evalua si una fila parece encabezado usando mayusculas predominantes."""
     stripped = text.strip()
     if not stripped:
         return False
@@ -1285,15 +1357,18 @@ def _row_is_heading(text: str) -> bool:
 
 
 def _is_blank_row(row) -> bool:
+    """Indica si una fila esta vacia segun su texto combinado."""
     return not _row_text(row).strip()
 
 
 def _row_has_borders(row) -> bool:
+    """Detecta si una fila contiene bordes definidos en su XML."""
     xml = row._tr.xml
     return "w:tcBorders" in xml or "w:trBorders" in xml
 
 
 def _find_blank_row_without_borders(table, start: int, end: int | None) -> int | None:
+    """Busca fila vacia sin bordes dentro de un rango."""
     limit = end if end is not None else len(table.rows)
     for idx in range(start, min(limit, len(table.rows))):
         row = table.rows[idx]
@@ -1303,10 +1378,12 @@ def _find_blank_row_without_borders(table, start: int, end: int | None) -> int |
 
 
 def _find_any_blank_row_without_borders(table) -> int | None:
+    """Busca la primera fila vacia sin bordes en toda la tabla."""
     return _find_blank_row_without_borders(table, 0, None)
 
 
 def _find_trailing_blank_row_without_borders(table, start: int, end: int | None) -> int | None:
+    """Busca fila vacia sin bordes al final de un rango."""
     limit = end if end is not None else len(table.rows)
     last_idx = min(limit, len(table.rows)) - 1
     idx = last_idx
@@ -1321,6 +1398,7 @@ def _find_trailing_blank_row_without_borders(table, start: int, end: int | None)
 
 
 def _collapse_blank_rows(table) -> None:
+    """Colapsa filas vacias consecutivas sin bordes para evitar espacios dobles."""
     idx = 0
     while idx < len(table.rows) - 1:
         row = table.rows[idx]
@@ -1337,6 +1415,7 @@ def _collapse_blank_rows(table) -> None:
 
 
 def _find_row_index(table, marker: str) -> int | None:
+    """Busca indice de fila encabezado que contenga un marcador textual."""
     target = marker.lower()
     for idx, row in enumerate(table.rows):
         row_text = _row_text(row)
@@ -1346,6 +1425,7 @@ def _find_row_index(table, marker: str) -> int | None:
 
 
 def _find_heading_row_index(table, module_key: str) -> int | None:
+    """Busca indice de encabezado para modulo core considerando aliases por idioma."""
     markers_by_module = {
         "experience": ["experiencia", "professional experience", "experience"],
         "education": ["educación", "educacion", "education"],
@@ -1359,6 +1439,7 @@ def _find_heading_row_index(table, module_key: str) -> int | None:
 
 
 def _localize_core_headings(table) -> None:
+    """Traduce encabezados core (experience/education/skills) al idioma de exportacion."""
     labels = _export_text()
     heading_keys = {
         "experience": "heading_experience",
@@ -1373,6 +1454,7 @@ def _localize_core_headings(table) -> None:
 
 
 def _find_row_index_predicate(table, predicate) -> int | None:
+    """Busca indice de fila usando una funcion predicado personalizada."""
     for idx, row in enumerate(table.rows):
         if predicate(_row_text(row).lower()):
             return idx
@@ -1380,6 +1462,7 @@ def _find_row_index_predicate(table, predicate) -> int | None:
 
 
 def _find_next_non_empty_row(table, start: int, end: int | None) -> int | None:
+    """Devuelve la siguiente fila no vacia desde un indice inicial."""
     limit = end if end is not None else len(table.rows)
     for idx in range(start, min(limit, len(table.rows))):
         if not _is_blank_row(table.rows[idx]):
@@ -1388,6 +1471,7 @@ def _find_next_non_empty_row(table, start: int, end: int | None) -> int | None:
 
 
 def _find_first_non_empty_before(table, end: int) -> int | None:
+    """Devuelve la primera fila no vacia antes de un limite dado."""
     for idx in range(min(end, len(table.rows))):
         if not _is_blank_row(table.rows[idx]):
             return idx
@@ -1395,12 +1479,14 @@ def _find_first_non_empty_before(table, end: int) -> int | None:
 
 
 def _remove_rows(table, start: int, end: int) -> None:
+    """Elimina un rango de filas de la tabla."""
     for _ in range(max(0, end - start)):
         row = table.rows[start]
         row._tr.getparent().remove(row._tr)
 
 
 def _insert_row_before(table, row_idx: int, tr_element) -> None:
+    """Inserta un elemento de fila (tr) antes del indice indicado en la tabla."""
     rows = list(table._tbl.tr_lst)
     if row_idx >= len(rows):
         table._tbl.append(tr_element)

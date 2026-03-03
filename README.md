@@ -1,177 +1,77 @@
-# 📄 TrufaDocs
+# TrufaDocs
 
-![Python](https://img.shields.io/badge/Python-3.12-blue)
-![Django](https://img.shields.io/badge/Django-6.0.2-darkgreen)
-![Status](https://img.shields.io/badge/Status-Portfolio%20Project-brightgreen)
-![Type](https://img.shields.io/badge/App-Django%20Web%20Tool-purple)
+Aplicacion web en Django para importar CVs (`.docx` / `.pdf`), normalizarlos a una estructura editable y exportarlos a DOCX/PDF.
 
-## 📸 Vista previa
+## Estado actual
 
-### 🔹 Pantalla de carga y detección de campos
+- Parser de CV con schema unico (`basics`, `experience`, `education`, `skills`, `extra_sections`).
+- UI ES/EN con mensajes localizados y persistencia de idioma.
+- Reorden de modulos con preservacion de `core_order`.
+- Export DOCX por plantilla (`templates/cv_template.docx`).
+- Export PDF via `docx2pdf` (requiere Microsoft Word en Windows/macOS).
+- Suite de tests enfocada en regresiones de parsing, localizacion y orden.
 
-![Carga de CV y detección de campos](docs/img/preview-upload.png)
+## Stack
 
-### 🔹 Editor de CV estructurado
+- Python 3.12+
+- Django 6.0.2
+- python-docx 1.2.0
+- pdfplumber 0.10.4
+- docx2pdf 0.1.8
 
-![Editor de CV estructurado](docs/img/preview-editor.png)
-
----
-
-**TrufaDocs** es una aplicación web construida con **Django** para procesar currículums de forma estructurada.  
-Permite importar CVs en `.docx` o `.pdf`, detectar automáticamente los campos, editarlos mediante formularios organizados y exportar el resultado a **DOCX** o **PDF**.
-
-Incluye UI bilingüe (**ES/EN**) con cambio en tiempo real, exportación localizada de títulos core y preservación del orden de módulos detectado al importar.
-
-La exportación se basa en una plantilla Word ubicada en:
-
-```
-templates/cv_template.docx
-```
-
----
-
-## 💡 Propósito del Proyecto
-
-TrufaDocs nace como una herramienta para:
-
-1. Automatizar la lectura de CVs en distintos formatos.
-2. Normalizar información desordenada a una estructura clara.
-3. Facilitar la edición de datos mediante un formulario amigable.
-4. Generar documentos finales consistentes basados en una plantilla.
-
-También funciona como práctica avanzada de backend con **Django**, manejo de archivos, parsing de texto y generación de documentos.
-
----
-
-## 📚 Documentación técnica
-
-Para el detalle completo de arquitectura, componentes, flujo interno y decisiones de implementación, consultar:
-
-- [DOCUMENTACION_TECNICA_COMPLETA.md](docs/DOCUMENTACION_TECNICA_COMPLETA.md)
-
----
-
-## ✨ Características
-
-- 📄 **Importación de CVs** (`.docx` y `.pdf`)
-- 🌐 **Interfaz ES/EN** con botón de cambio de idioma y persistencia en `localStorage`
-- 🧠 **Detección heurística de campos**
-- 🧭 **Preservación de orden de módulos** al importar (incluye módulos extra entre secciones core)
-- 🗓️ **Fechas y honores ES/EN** en parseo PDF (`Jan/Feb/...`, `Present`, `Honors/Honours`)
-- 📝 **Formulario estructurado** para edición manual
-- 🧩 Separación por secciones:
-  - Datos básicos
-  - Experiencia
-  - Educación
-  - Habilidades
-  - Extras
-- 🧾 **Exportación a DOCX** usando plantilla
-- 🖨️ **Exportación a PDF** mediante Word + `docx2pdf`
-- 🔤 **Exportación localizada** de encabezados core (`EXPERIENCIA` / `PROFESSIONAL EXPERIENCE`, etc.)
-- 🧪 Redirecciones y validaciones para evitar errores de flujo
-
----
-
-## 🛠️ Tecnologías
-
-- **Django 6.0.2**
-- **python-docx** — generación de documentos Word
-- **pdfplumber** — extracción de texto desde PDF
-- **docx2pdf** — conversión DOCX → PDF (requiere Word)
-
----
-
-## 📦 Requisitos
-
-- Python **3.12+** (recomendado)
-- Microsoft Word (necesario para exportar a PDF)
-
----
-
-## 🔧 Instalación
-
-### 1️⃣ Crear entorno virtual
+## Instalacion local
 
 ```bash
 python -m venv .venv
 ```
 
-### 2️⃣ Activar entorno virtual
-
-Windows (PowerShell):
+PowerShell (Windows):
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-### 3️⃣ Instalar dependencias
-
-```bash
 pip install -r requirements.txt
-```
-
-### 4️⃣ Crear archivo de entorno
-
-```bash
 copy .env.example .env
-```
-
----
-
-## 🚀 Ejecutar en local
-
-```bash
 python manage.py runserver
 ```
 
-Abrir en el navegador:
+Bash (Linux/macOS):
 
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python manage.py runserver
 ```
-http://127.0.0.1:8000/
-```
 
----
+Abrir: `http://127.0.0.1:8000/`
 
-## 🔄 Flujo de uso
+## Endpoints
 
-1. Subir un CV desde el panel principal.
-2. (Opcional) Cambiar idioma con el botón **ES/EN**.
-3. Presionar **Detectar campos**.
-4. Revisar y ajustar los datos en el formulario.
-5. Exportar usando:
-   - **Exportar DOCX**
-   - **Exportar PDF**
-
----
-
-## 🔗 Endpoints principales
-
-| Método | Ruta                 | Función                    |
-| ------ | -------------------- | -------------------------- |
-| GET    | `/`                  | Editor principal           |
+| Metodo | Ruta                 | Uso |
+| ------ | -------------------- | --- |
+| GET    | `/`                  | Editor principal |
 | POST   | `/upload/`           | Importar y detectar campos |
-| POST   | `/text/export/docx/` | Exportar DOCX              |
-| POST   | `/text/export/pdf/`  | Exportar PDF               |
+| POST   | `/text/export/docx/` | Exportar DOCX |
+| POST   | `/text/export/pdf/`  | Exportar PDF |
 
-📌 `GET /upload/` redirige al index para evitar errores.
+Nota: `GET /upload/` redirige a `/`.
 
----
+## Variables de entorno
 
-## ⚙️ Variables de entorno
+Definidas en `.env.example` y consumidas en `trufadocs/settings.py`.
 
-Configuradas en `trufadocs/settings.py`:
+Minimas:
 
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG`
 - `DJANGO_ALLOWED_HOSTS`
-- `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `MAX_UPLOAD_MB`
 - `CV_TEMPLATE_PATH`
 
-### Producción (seguridad)
+Produccion (seguridad):
 
+- `DJANGO_CSRF_TRUSTED_ORIGINS`
 - `DJANGO_SECURE_SSL_REDIRECT`
-- `DJANGO_SESSION_COOKIE_SECURE`
 - `DJANGO_CSRF_COOKIE_SECURE`
 - `DJANGO_SECURE_HSTS_SECONDS`
 - `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS`
@@ -179,52 +79,16 @@ Configuradas en `trufadocs/settings.py`:
 - `DJANGO_SECURE_PROXY_SSL_HEADER`
 - `DJANGO_USE_X_FORWARDED_HOST`
 
-Valores de ejemplo en `.env.example`.
-
----
-
-## 🗄️ Base de datos
-
-El proyecto usa un backend sin persistencia:
-
-- No existen modelos permanentes
-- No se guarda historial de CVs
-
-Toda la información se mantiene en memoria durante la sesión.
-
----
-
-## 🧪 Pruebas
+## Tests
 
 ```bash
-python manage.py test
+python manage.py test editor.tests
 ```
 
-Suites clave agregadas para estos cambios:
+## Documentacion
 
-```bash
-python manage.py test editor.tests.test_view_localization
-python manage.py test editor.tests.test_docx_template_localization
-python manage.py test editor.tests.test_import_module_order
-python manage.py test editor.tests.test_pdf_english_dates_honors
-```
+- Guia tecnica completa paso a paso para onboarding junior:
+  - `docs/DOCUMENTACION_TECNICA_COMPLETA.md`
+- Mapa de estructura del repo:
+  - `ARBOL.md`
 
----
-
-## ⚠️ Limitaciones conocidas
-
-- El parsing de PDF es menos preciso que DOCX, pero mejora con formatos consistentes.
-- Exportar PDF depende de Word + `docx2pdf`.
-- El resultado final depende de la plantilla DOCX y de las fuentes instaladas.
-
----
-
-## 📁 Estructura del proyecto
-
-Consultar:
-
-```
-ARBOL.md
-```
-
-para ver el árbol actualizado del repositorio.

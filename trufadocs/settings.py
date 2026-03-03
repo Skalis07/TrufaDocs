@@ -70,8 +70,6 @@ DATABASES = {
     }
 }
 
-AUTH_PASSWORD_VALIDATORS = []
-
 LANGUAGE_CODE = "es"
 
 TIME_ZONE = "UTC"
@@ -92,8 +90,6 @@ CV_TEMPLATE_PATH = os.environ.get("CV_TEMPLATE_PATH", "")
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_MB * 1024 * 1024
 
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
 # -----------------------
 # Seguridad / Produccion
 # -----------------------
@@ -104,7 +100,6 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
 CSRF_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SAMESITE = "Lax"
 
 if not DEBUG:
     # En produccion exigimos variables reales y HTTPS
@@ -114,7 +109,6 @@ if not DEBUG:
         raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS es requerido en produccion.")
 
     SECURE_SSL_REDIRECT = _get_env_bool("DJANGO_SECURE_SSL_REDIRECT", True)
-    SESSION_COOKIE_SECURE = _get_env_bool("DJANGO_SESSION_COOKIE_SECURE", True)
     CSRF_COOKIE_SECURE = _get_env_bool("DJANGO_CSRF_COOKIE_SECURE", True)
 
     SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "31536000"))

@@ -18,6 +18,10 @@ from .structure_types import ExtraSectionRaw
 
 
 
+# --------------------
+# Helpers base de extras
+# --------------------
+
 def _split_escaped_newlines(text: str) -> List[str]:
     """Separa texto en líneas, soportando tanto saltos reales como literales \\n.
 
@@ -42,6 +46,7 @@ def _split_escaped_newlines(text: str) -> List[str]:
     return parts
 
 def _empty_extra_entry() -> Dict:
+    """Construye la estructura vacia estandar para una entrada extra."""
     return {
         "subtitle": "",
         "title": "",
@@ -56,6 +61,7 @@ def _empty_extra_entry() -> Dict:
 
 
 def _has_extra_entry_content(entry: Dict) -> bool:
+    """Indica si una entrada extra tiene contenido util en algun campo."""
     if not entry:
         return False
     fields = [
@@ -74,6 +80,7 @@ def _has_extra_entry_content(entry: Dict) -> bool:
 
 
 def _infer_extra_mode(entries: List[Dict]) -> str:
+    """Infiere el modo de una seccion extra: detailed o subtitle_items."""
     # Solo dos modos en Extras: detailed o subtitle_items
     for entry in entries:
         if any(entry.get(key) for key in ["title", "where", "start", "end", "city", "country"]):
@@ -83,13 +90,15 @@ def _infer_extra_mode(entries: List[Dict]) -> str:
 
 
 def _infer_entry_mode(entry: Dict) -> str:
+    """Infiere el modo de una entrada individual para compatibilidad."""
     # Mantener compat: no se mezcla por entrada.
     if any(entry.get(key) for key in ["title", "where", "start", "end", "city", "country"]):
         return "detailed"
     return "subtitle_items"
 
-
-
+# --------------------
+# Parsing de lineas y bloques
+# --------------------
 
 def _looks_like_inline_list(line: str) -> bool:
     """Detecta líneas tipo listado 'A, B, C' (sin bullets).
@@ -143,6 +152,7 @@ def _split_items_text(raw_text: str) -> List[str]:
     return [item for item in items if item]
 
 def _extract_line_payload(raw_line: Any) -> Tuple[str, Dict[str, Any]]:
+    """Normaliza una linea cruda (str o dict) al par (texto, metadatos)."""
     if isinstance(raw_line, dict):
         text = str(raw_line.get("text", "") or "").strip()
         return (
@@ -168,6 +178,7 @@ def _extract_line_payload(raw_line: Any) -> Tuple[str, Dict[str, Any]]:
 
 
 def _split_extra_blocks(lines: List[Any]) -> List[List[Any]]:
+    """Divide lineas en bloques de entradas usando vacios o headings."""
     blocks: List[List[Any]] = []
     current: List[Any] = []
     for raw_line in lines:
@@ -188,6 +199,7 @@ def _split_extra_blocks(lines: List[Any]) -> List[List[Any]]:
 
 
 def _infer_block_indents(block: List[Any]) -> Tuple[float, float | None]:
+    """Estima indentacion base y umbral de columna derecha para un bloque."""
     indents: List[float] = []
     for raw_line in block:
         text, meta = _extract_line_payload(raw_line)
@@ -204,6 +216,7 @@ def _infer_block_indents(block: List[Any]) -> Tuple[float, float | None]:
 
 
 def _split_location_tail_loose(text: str) -> Tuple[str, str]:
+    """Separa de forma flexible un posible sufijo de ubicacion."""
     candidate = (text or "").strip()
     if not candidate:
         return "", ""
@@ -221,6 +234,7 @@ def _split_location_tail_loose(text: str) -> Tuple[str, str]:
 
 
 def _looks_like_location_prefix(text: str) -> bool:
+    """Valida si un texto puede actuar como prefijo de ubicacion pendiente."""
     candidate = (text or "").strip()
     if not candidate:
         return False
@@ -234,6 +248,7 @@ def _looks_like_location_prefix(text: str) -> bool:
 
 
 def _apply_location_prefix(entry: Dict, prefix: str) -> str:
+    """Aplica prefijo pendiente a la ciudad de la entrada y retorna remanente."""
     prefix = (prefix or "").strip()
     if not prefix:
         return ""
@@ -247,6 +262,7 @@ def _apply_location_prefix(entry: Dict, prefix: str) -> str:
 
 
 def _split_trailing_location(line: str) -> Tuple[str, str, str]:
+    """Extrae ubicacion al final y retorna (resto, ciudad, pais)."""
     candidate = (line or "").strip()
     if not candidate or "," not in candidate:
         return candidate, "", ""
@@ -328,6 +344,7 @@ def _split_trailing_location(line: str) -> Tuple[str, str, str]:
 
 
 def _is_location_prefix_only(text: str) -> bool:
+    """Indica si el texto contiene solo conectores/prefijos de ubicacion."""
     words = [_normalize_ascii(word) for word in (text or "").split() if word]
     if not words:
         return True
@@ -338,6 +355,7 @@ def _is_location_prefix_only(text: str) -> bool:
 
 
 def _is_location_stub(text: str) -> bool:
+    """Detecta residuos cortos que no deben tratarse como contenido principal."""
     stripped = (text or "").strip()
     if not stripped:
         return True
@@ -349,6 +367,7 @@ def _is_location_stub(text: str) -> bool:
 
 
 def _split_location_prefix_from_text(text: str) -> Tuple[str, str]:
+    """Extrae un posible prefijo de ubicacion desde el final de un texto."""
     words = (text or "").split()
     if len(words) < 2:
         return text, ""
@@ -359,6 +378,7 @@ def _split_location_prefix_from_text(text: str) -> Tuple[str, str]:
     prev_norm = _normalize_ascii(prev)
 
     def is_title_word(word: str) -> bool:
+        """Valida palabra con forma de nombre propio para heuristicas de ciudad."""
         return word[:1].isupper() and not word.isdigit()
 
     if last_norm in _CITY_CONNECTORS and is_title_word(prev):
@@ -375,6 +395,7 @@ def _split_location_prefix_from_text(text: str) -> Tuple[str, str]:
 
 
 def _merge_location_prefix(entry: Dict, source_key: str, line_stub: str) -> bool:
+    """Mueve prefijo de ubicacion desde `source_key` hacia `entry['city']`."""
     if not entry.get("city"):
         return False
     if not _is_location_stub(line_stub):
@@ -393,11 +414,13 @@ def _merge_location_prefix(entry: Dict, source_key: str, line_stub: str) -> bool
 
 
 def _split_title_location_suffix(title: str) -> Tuple[str, str]:
+    """Separa sufijo de ubicacion embebido al final de un titulo."""
     words = [word for word in (title or "").split() if word]
     if len(words) < 3:
         return title, ""
 
     def is_title_word(word: str) -> bool:
+        """Valida palabra con forma de nombre propio para detectar sufijos."""
         return word[:1].isupper() and not word.isdigit()
 
     max_len = min(4, len(words))
@@ -421,18 +444,22 @@ def _split_title_location_suffix(title: str) -> Tuple[str, str]:
             return base, " ".join(segment).strip()
     return title, ""
 
-
-
+# --------------------
+# Merge y normalizacion de entradas
+# --------------------
 
 def _entry_has_location(entry: Dict) -> bool:
+    """Indica si la entrada ya contiene datos de ubicacion."""
     return any(entry.get(key) for key in ("where", "city", "country"))
 
 
 def _entry_has_core(entry: Dict) -> bool:
+    """Indica si la entrada ya tiene campos nucleares de detalle."""
     return any(entry.get(key) for key in ("title", "start", "end"))
 
 
 def _is_sparse_extra_entry(entry: Dict) -> bool:
+    """Detecta entradas livianas (sin items/subtitulo), candidatas a merge."""
     if not entry:
         return False
     if entry.get("subtitle"):
@@ -443,6 +470,7 @@ def _is_sparse_extra_entry(entry: Dict) -> bool:
 
 
 def _is_subtitle_only_extra_entry(entry: Dict) -> bool:
+    """Detecta entradas que solo contienen subtitulo sin detalle adicional."""
     if not entry:
         return False
     subtitle = (entry.get("subtitle") or "").strip()
@@ -456,12 +484,14 @@ def _is_subtitle_only_extra_entry(entry: Dict) -> bool:
 
 
 def _is_detailed_extra_entry(entry: Dict) -> bool:
+    """Detecta entradas de modo detallado (title/where/fechas/ubicacion/tech)."""
     if not entry:
         return False
     return any((entry.get(key) or "").strip() for key in ("title", "where", "tech", "start", "end", "city", "country"))
 
 
 def _merge_extra_entries(core_entry: Dict, loc_entry: Dict) -> Dict:
+    """Combina dos fragmentos de entrada en una sola entrada completa."""
     merged = _empty_extra_entry()
     merged["subtitle"] = (core_entry.get("subtitle") or loc_entry.get("subtitle") or "").strip()
     merged["title"] = (core_entry.get("title") or loc_entry.get("title") or "").strip()
@@ -482,6 +512,7 @@ def _merge_extra_entries(core_entry: Dict, loc_entry: Dict) -> Dict:
 
 
 def _should_merge_extra_entries(first: Dict, second: Dict) -> bool:
+    """Decide si dos entradas consecutivas deben fusionarse."""
     if not (_is_sparse_extra_entry(first) and _is_sparse_extra_entry(second)):
         return False
     first_loc = _entry_has_location(first)
@@ -496,6 +527,12 @@ def _should_merge_extra_entries(first: Dict, second: Dict) -> bool:
 
 
 def _merge_extra_entry_fragments(entries: List[Dict]) -> List[Dict]:
+    """Une fragmentos consecutivos generados por cortes agresivos del parser.
+
+    Casos principales:
+    - entrada detallada seguida de subtitulos sueltos
+    - pares complementarios core+ubicacion
+    """
     if len(entries) < 2:
         return entries
     merged: List[Dict] = []
@@ -549,6 +586,10 @@ def _merge_extra_entry_fragments(entries: List[Dict]) -> List[Dict]:
         idx += 1
     return merged
 
+# --------------------
+# Parsing principal de entradas extra
+# --------------------
+
 def _should_start_new_extra_entry(
     entry: Dict,
     items: List[str],
@@ -556,6 +597,11 @@ def _should_start_new_extra_entry(
     meta: Dict[str, Any],
     right_threshold: float | None,
 ) -> bool:
+    """Evalua si la linea actual inicia una nueva entrada extra.
+
+    Usa contexto acumulado (entry/items), estilo (bold/indent), fechas,
+    patrones de organizacion y reglas anti-falsos positivos con ubicacion/tech.
+    """
     if not (entry and (_has_extra_entry_content(entry) or items)):
         return False
     if meta.get("is_bullet") or _is_bullet(line):
@@ -621,6 +667,7 @@ def _should_start_new_extra_entry(
 
 
 def _looks_like_detailed_bullet(entry: Dict, line: str) -> bool:
+    """Decide si un bullet debe parsearse como detalle y no como subtitulo."""
     text = _clean_bullet(line).strip()
     if not text:
         return False
@@ -652,6 +699,11 @@ def _looks_like_detailed_bullet(entry: Dict, line: str) -> bool:
 
 
 def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
+    """Parsea lineas de una seccion extra y produce entradas normalizadas.
+
+    Soporta lineas crudas de texto y lineas enriquecidas (dict) provenientes
+    de PDF. Resuelve fechas, ubicaciones, tech, subtitulos e items.
+    """
     blocks = _split_extra_blocks(lines)
     entries: List[Dict] = []
     for block in blocks:
@@ -947,6 +999,7 @@ def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
 
 
 def _parse_extras(extras: List[ExtraSectionRaw]) -> List[Dict]:
+    """Parsea todas las secciones extra al formato final consumido por la UI."""
     parsed = []
     for idx, extra in enumerate(extras):
         title = extra["title"].strip()

@@ -1,7 +1,10 @@
 @import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap");
 
-/* Paleta y variables base */
-/* Forzar ocultamiento de campos con atributo hidden */
+/* ==========================================================================
+   Base global del tema
+   - Variables de color y assets.
+   - Reglas de seguridad visual que aplican a toda la pagina.
+   ========================================================================== */
 [hidden] {
   display: none !important;
 }
@@ -15,7 +18,6 @@
   --panel: #ffffff;
   --primary: #0e7d70;
   --primary-dark: #0a5b52;
-  --secondary: #c2561f;
   --stroke: #ddcdbb;
   --shadow: 0 32px 70px -40px rgba(0, 0, 0, 0.32);
   --accent: #f5d7b4;
@@ -31,7 +33,7 @@
   --hero-photo-right: url("./images/banner/3.jpg");
 }
 
-/* Paleta para modo nocturno */
+/* Modo nocturno: mismos tokens semanticos, distintos valores */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0f1114;
@@ -41,7 +43,6 @@
   --panel: #161b22;
   --primary: #2fcab8;
   --primary-dark: #219b8c;
-  --secondary: #f1a46a;
   --stroke: #2a323c;
   --shadow: 0 28px 60px -40px rgba(0, 0, 0, 0.75);
   --accent: #2a231e;
@@ -85,19 +86,9 @@ body {
   overflow-x: hidden;
 }
 
-body::after {
-  display: none;
-}
-
-/* Layout general */
-
-
-
-
-
-
-
-
+/* ==========================================================================
+   Layout principal (contenedor y hero)
+   ========================================================================== */
 .shell {
   position: relative;
   max-width: 880px;
@@ -177,6 +168,8 @@ body::after {
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
 }
+
+/* Capa de brillo/contraste sobre el hero para mejorar legibilidad del texto */
 .hero-overlay {
   position: absolute;
   inset: 0;
@@ -202,58 +195,11 @@ body::after {
     linear-gradient(120deg, rgba(201, 154, 92, 0.12), transparent 55%);
 }
 
-:root[data-theme="dark"] .hero.hero-photo::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: -4%;
-  width: 26%;
-  background-image: var(--hero-photo-right);
-  background-size: contain;
-  background-position: right center;
-  background-repeat: no-repeat;
-  filter: blur(0.8px);
-  opacity: 1;
-  pointer-events: none;
-  z-index: 1;
-  -webkit-mask-image: linear-gradient(to left, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 25%, rgba(0, 0, 0, 0.95) 45%, rgba(0, 0, 0, 0.75) 60%, rgba(0, 0, 0, 0.5) 75%, rgba(0, 0, 0, 0.2) 90%, rgba(0, 0, 0, 0) 100%);
-  mask-image: linear-gradient(to left, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 25%, rgba(0, 0, 0, 0.95) 45%, rgba(0, 0, 0, 0.75) 60%, rgba(0, 0, 0, 0.5) 75%, rgba(0, 0, 0, 0.2) 90%, rgba(0, 0, 0, 0) 100%);
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-}
-:root[data-theme="dark"] .hero.hero-photo::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -4%;
-  width: 26%;
-  background-image: var(--hero-photo-left);
-  background-size: contain;
-  background-position: left center;
-  background-repeat: no-repeat;
-  filter: blur(0.8px);
-  opacity: 1;
-  pointer-events: none;
-  z-index: 1;
-  -webkit-mask-image: linear-gradient(to right, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 25%, rgba(0, 0, 0, 0.95) 45%, rgba(0, 0, 0, 0.75) 60%, rgba(0, 0, 0, 0.5) 75%, rgba(0, 0, 0, 0.2) 90%, rgba(0, 0, 0, 0) 100%);
-  mask-image: linear-gradient(to right, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 1) 25%, rgba(0, 0, 0, 0.95) 45%, rgba(0, 0, 0, 0.75) 60%, rgba(0, 0, 0, 0.5) 75%, rgba(0, 0, 0, 0.2) 90%, rgba(0, 0, 0, 0) 100%);
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-}
 .hero-content {
   position: relative;
   z-index: 3;
   font-family: "Spectral", "Space Grotesk", "Segoe UI", serif;
 }
-
-
-
 .hero-content h1 {
   font-family: "Playfair Display", "DM Serif Display", serif;
   font-size: clamp(2.6rem, 4.4vw, 3.3rem);
@@ -263,11 +209,6 @@ body::after {
   text-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
   margin-bottom: 10px;
 }
-
-
-
-
-
 .hero-content p {
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
   color: var(--ink);
@@ -277,10 +218,6 @@ body::after {
   line-height: 1.6;
   max-width: 46ch;
 }
-
-
-
-
 :root[data-theme="dark"] .hero.hero-photo {
   border-color: rgba(46, 56, 67, 0.9);
   background-color: #3e3837;
@@ -291,14 +228,13 @@ body::after {
   background-position: center, center;
   background-repeat: no-repeat, no-repeat;
 }
-
-
 .hero-actions {
   display: inline-flex;
   align-items: center;
   gap: 10px;
 }
 
+/* Popover de ayuda (usa <details>/<summary>) */
 .help {
   position: relative;
 }
@@ -384,6 +320,8 @@ body::after {
   font-size: 0.9rem;
   line-height: 1.5;
 }
+
+/* Fila superior del hero: badge + controles (tema / idioma / ayuda) */
 .hero-top {
   display: flex;
   align-items: center;
@@ -459,6 +397,7 @@ body::after {
   text-transform: uppercase;
 }
 
+/* Iconografia del switch de tema */
 .theme-icon {
   display: inline-flex;
   align-items: center;
@@ -617,6 +556,7 @@ p {
   grid-column: 1 / -1;
 }
 
+/* Lista editable de "hitos" en experiencia: cada fila es input + boton eliminar */
 .highlight-block {
   display: grid;
   gap: 10px;
@@ -659,7 +599,8 @@ p {
 
 
 
-.date-current-below{
+/* Checkbox "en curso / puesto actual" bajo el selector de fecha fin */
+.date-current-below {
   margin-top: 6px;
   display: inline-flex;
   gap: 8px;
@@ -703,6 +644,7 @@ p {
   gap: 16px;
 }
 
+/* Picker de archivo custom: el input real queda invisible por encima del contenedor */
 .file {
   display: grid;
   gap: 10px;
@@ -816,19 +758,6 @@ button.theme-toggle {
 
 .primary:hover {
   background: var(--primary-dark);
-}
-
-.secondary {
-  background: #f6e4d6;
-  color: var(--secondary);
-  border: 1px solid #e9c6ad;
-  font-weight: 700;
-}
-
-:root[data-theme="dark"] .secondary {
-  background: rgba(241, 164, 106, 0.15);
-  color: #f1a46a;
-  border-color: rgba(241, 164, 106, 0.35);
 }
 
 .ghost {
@@ -1047,25 +976,55 @@ button[data-remove]:hover {
 }
 
 
-/* Alinear checkbox de puesto actual a la derecha sin afectar el grid de fechas */
+/* --------------------------------------------------------------------------
+   Extras y reordenamiento de modulos
+   -------------------------------------------------------------------------- */
+.mode-select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 16px;
+  border-radius: 10px;
+}
 
+/* Contenedor visual de cada modulo movible */
+.module-block {
+  margin: 18px 0;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
 
-/* Extras: selector de modo por sección */
-.mode-select{width:100%; min-height:42px; padding:10px 12px; font-size:16px; border-radius:10px;}
+/* Header con titulo + acciones (subir/bajar/eliminar) */
+.module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  width: 100%;
+}
 
-/* Core modules reorder */
-.module-block{margin: 18px 0; padding: 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.10);}
-.module-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 10px; width:100%;}
-.module-move{display:flex; gap:8px;}
-.btn-move{min-width:40px; height:38px; border-radius:10px; font-size:16px; padding:0 10px;}
+.module-move {
+  display: flex;
+  gap: 8px;
+}
 
+.btn-move {
+  min-width: 40px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 16px;
+  padding: 0 10px;
+}
 
-/* Animación suave al reordenar módulos */
-.module-block.module-anim{transition: transform 220ms ease;}
-.module-block.module-reorder-active{
+/* Hint de rendimiento durante reorder activo */
+.module-block.module-reorder-active {
   will-change: transform;
 }
 
-
-/* Ajuste: cuando module-head está dentro de section-header, que use todo el ancho */
-.section-header .module-head{flex:1; width:100%;}
+/* Si module-head vive dentro de section-header, toma todo el ancho disponible */
+.section-header .module-head {
+  flex: 1;
+  width: 100%;
+}
