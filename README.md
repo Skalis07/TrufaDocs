@@ -1,6 +1,30 @@
 # TrufaDocs
 
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![Django](https://img.shields.io/badge/Django-6.0.2-darkgreen)
+![Status](https://img.shields.io/badge/Status-Terminado-red)
+![Type](https://img.shields.io/badge/App-Django%20Web%20Tool-1f6feb)
+
 Aplicacion web en Django para importar CVs (`.docx` / `.pdf`), normalizarlos a una estructura editable y exportarlos a DOCX/PDF.
+
+## Vista previa
+
+### Carga de CV y deteccion de campos
+
+![Carga de CV y deteccion de campos](docs/img/preview-upload.png)
+
+### Editor de CV estructurado
+
+![Editor de CV estructurado](docs/img/preview-editor.png)
+
+---
+
+Documentacion principal:
+
+- [docs/DOCUMENTACION_TECNICA_COMPLETA.md](docs/DOCUMENTACION_TECNICA_COMPLETA.md)
+- [ARBOL.md](ARBOL.md)
+
+---
 
 ## Estado actual
 
@@ -11,6 +35,16 @@ Aplicacion web en Django para importar CVs (`.docx` / `.pdf`), normalizarlos a u
 - Export PDF via `docx2pdf` (requiere Microsoft Word en Windows/macOS).
 - Suite de tests enfocada en regresiones de parsing, localizacion y orden.
 
+## Caracteristicas
+
+- Importacion de CVs (`.docx` y `.pdf`)
+- Deteccion heuristica de campos
+- Formulario estructurado para edicion manual
+- Preservacion de orden de modulos (core + extras)
+- Exportacion a DOCX usando plantilla
+- Exportacion a PDF mediante Word + `docx2pdf`
+- Exportacion localizada de encabezados core (ES/EN)
+
 ## Stack
 
 - Python 3.12+
@@ -18,6 +52,11 @@ Aplicacion web en Django para importar CVs (`.docx` / `.pdf`), normalizarlos a u
 - python-docx 1.2.0
 - pdfplumber 0.10.4
 - docx2pdf 0.1.8
+
+## Requisitos
+
+- Python 3.12+
+- Microsoft Word (para exportacion PDF con `docx2pdf`)
 
 ## Instalacion local
 
@@ -44,6 +83,14 @@ python manage.py runserver
 ```
 
 Abrir: `http://127.0.0.1:8000/`
+
+## Flujo de uso
+
+1. Subir un CV desde el panel principal.
+2. (Opcional) Cambiar idioma con el boton ES/EN.
+3. Presionar Detectar campos.
+4. Revisar y ajustar los datos en el formulario.
+5. Exportar DOCX o PDF.
 
 ## Endpoints
 
@@ -85,10 +132,9 @@ Produccion (seguridad):
 python manage.py test editor.tests
 ```
 
-## Documentacion
+## Limitaciones conocidas
 
-- Guia tecnica completa paso a paso para onboarding junior:
-  - `docs/DOCUMENTACION_TECNICA_COMPLETA.md`
-- Mapa de estructura del repo:
-  - `ARBOL.md`
+- El parsing de PDF puede ser menos preciso que DOCX segun el formato origen.
+- Exportar PDF depende de Word + `docx2pdf`.
+- El resultado final depende de la plantilla DOCX y de las fuentes instaladas.
 
