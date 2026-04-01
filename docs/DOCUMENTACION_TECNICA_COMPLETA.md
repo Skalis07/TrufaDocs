@@ -1,6 +1,6 @@
 # TRUFADOCS - GUIA TECNICA PASO A PASO (JUNIOR)
 
-Fecha de actualizacion: 2026-02-25
+Fecha de actualizacion: 2026-03-31
 
 Esta guia esta escrita para alguien que recien entra al proyecto.
 La idea es que puedas seguirla en orden y entender que hace cada parte sin asumir conocimiento previo del repo.
@@ -118,6 +118,7 @@ Todo gira en torno a este schema (simplificado):
       "end": "",
       "city": "",
       "country": "",
+      "items": [],
       "honors": "",
     }
   ],
@@ -139,6 +140,9 @@ Reglas clave:
 - `extra_sections` permite modulos no core entre secciones base.
 - `extra.mode` canonico hoy: `detailed` o `subtitle_items`.
 - Alias legacy `items`/`subtitles` se normalizan internamente para compatibilidad.
+- `education.items` es hoy el campo visible/canonico para items libres; `honors` queda como compatibilidad legacy.
+- Los headings core visibles se muestran en mayusculas; en ingles el heading actual es `EXPERIENCE`.
+- El parser PDF mantiene compatibilidad con headings viejos como `PROFESSIONAL EXPERIENCE`.
 - `default_structure()` garantiza que siempre haya estructura minima valida.
 
 ---
@@ -158,6 +162,12 @@ Funciones que debes conocer:
 - `_extract_docx_text`: extraccion de texto DOCX (parrafos/tablas + fallback XML).
 - `_convert_docx_bytes_to_pdf`: conversion docx2pdf en carpeta temporal.
 
+Detalles importantes hoy:
+
+- `_selected_font` ya no permite modo "usar fuente de la plantilla": siempre devuelve una fuente valida de `FONT_CHOICES`.
+- `_render_text_editor` normaliza `education.items` antes de pintar la UI para evitar choques con `dict.items`.
+- `export_docx` y `export_pdf` dependen del mismo `structured` reconstruido desde `structure_from_post`.
+
 Si quieres cambiar validaciones de upload, siempre empiezas en `views.py`.
 
 ## 5.2 `editor/structure.py`
@@ -171,6 +181,7 @@ Funciones importantes:
 - `structure_from_post(post_data)` -> formulario a estructura.
 - `build_text_from_structure(data)` -> estructura a texto legible.
 - `_split_sections`, `_parse_experience`, `_parse_education`, `_parse_skills`.
+- `_normalize_education_items`, `_normalize_education_entry`.
 
 `structure_from_post` es critica porque es la puerta de salida del frontend.
 Si rompe, rompen exportaciones aunque la UI "se vea" bien.
@@ -219,6 +230,13 @@ Pipeline PDF en 4 etapas:
 
 Si falla solo en PDF y no en DOCX, casi seguro el problema esta aqui.
 
+Casos cubiertos recientemente:
+
+- headings EN nuevos (`EXPERIENCE`) y legacy (`PROFESSIONAL EXPERIENCE`);
+- lineas cortas con `:` que no deben romper secciones (`GPA: 3.8`);
+- `Honors:` / `Honores:` dentro de educacion como items visibles;
+- preservacion de orden de extras entre modulos core.
+
 ## 5.6 `editor/docx_template.py`
 
 Responsabilidad: generar documento final desde `structured` + plantilla.
@@ -230,6 +248,10 @@ Hace:
 - aplicar orden de modulos (`core_order`),
 - localizar headings ES/EN,
 - aplicar fuente seleccionada.
+
+Detalle importante:
+
+- La fuente elegida se fuerza sobre contenido, estilos, numbering, theme y metadatos del DOCX para evitar mezclas residuales de la plantilla.
 
 Si "se ve mal" el DOCX exportado, revisa este archivo antes que el parser.
 
@@ -274,6 +296,8 @@ Responsabilidad:
 - tema,
 - manejo de fechas,
 - add/remove de bloques repeat,
+- reorder interno de experiencias, educacion, categorias de skills y entradas extra,
+- reorder de hitos/items en experiencia, educacion y extras detallados,
 - sincronizacion de extras por modo,
 - reorder de modulos,
 - serializacion final antes de submit.
@@ -294,28 +318,37 @@ Lee en este orden:
 1. `test_view_localization.py`
    - valida mensajes ES/EN de upload.
 
-2. `test_structure_from_post.py`
+2. `test_view_font_selection.py`
+   - garantiza que siempre exista una fuente efectiva valida y que no vuelva la opcion de plantilla.
+
+3. `test_view_education_items.py`
+   - evita regresiones de render en `education.items` legacy.
+
+4. `test_view_exports.py`
+   - smoke tests de export DOCX/PDF y aplicacion global de fuente.
+
+5. `test_structure_from_post.py`
    - protege normalizacion de payload sparse en extras.
 
-3. `test_import_module_order.py`
+6. `test_import_module_order.py`
    - protege preservacion de orden de modulos.
 
-4. `test_pdf_english_dates_honors.py`
-   - protege parse EN de fechas y honors.
+7. `test_pdf_english_dates_honors.py`
+   - protege parse ES/EN de fechas, `Honors:`/`Honores:` y casos `GPA:`.
 
-5. `test_pdf_section_title_detection.py`
+8. `test_pdf_section_title_detection.py`
    - evita falsos positivos de headings en contenido PDF (regresiones de deteccion).
 
-6. `test_pdf_extra_section_parsing.py`
+9. `test_pdf_extra_section_parsing.py`
    - protege parse de extras desde PDF.
 
-7. `test_docx_template_localization.py`
+10. `test_docx_template_localization.py`
    - valida headings/labels EN en export.
 
-8. `test_docx_template_module_order.py`
+11. `test_docx_template_module_order.py`
    - valida espaciado/orden visual entre modulos.
 
-9. `test_docx_template_skills_pagination.py`
+12. `test_docx_template_skills_pagination.py`
    - valida reglas de paginacion en skills.
 
 Comando:
@@ -357,6 +390,19 @@ python manage.py test editor.tests
 2. Ver `structure_from_post` (reconstruye orden final).
 3. Ver `docx_template.py` (`_apply_module_order`).
 4. Ejecutar tests de module order.
+
+## Caso E: cambiar headings core o localizacion de export
+
+1. Revisar `editor/static/editor/editor.js` para labels de UI.
+2. Revisar `editor/docx_template.py` (`EXPORT_TEXT`) para headings exportados.
+3. Si afecta import de PDFs viejos/nuevos, revisar `editor/pdf_parse/bridge.py`.
+4. Ejecutar `test_docx_template_localization.py` y `test_import_module_order.py`.
+
+## Caso F: cambiar fuente de export
+
+1. Revisar `editor/views.py` (`FONT_CHOICES`, `DEFAULT_FONT`, `_selected_font`).
+2. Revisar `editor/docx_template.py` (`_apply_font` y helpers relacionados).
+3. Ejecutar `test_view_font_selection.py` y `test_view_exports.py`.
 
 ---
 
@@ -457,6 +503,8 @@ Usala cuando necesites tocar una parte puntual y no quieras leer todo el archivo
 - `_parse_experience`: parsea bloque de experiencia a lista normalizada.
 - `_parse_education`: parsea bloque de educacion a lista normalizada.
 - `_parse_skills`: parsea habilidades por categoria/items.
+- `_normalize_education_items`: aplana `education.items` y evita valores estructurados accidentales.
+- `_normalize_education_entry`: sanea una entrada de educacion completa antes de UI/export.
 - `_ensure_minimums`: garantiza filas minimas en core sections.
 
 ### Helpers internos relevantes en `build_text_from_structure`
@@ -519,6 +567,7 @@ Usala cuando necesites tocar una parte puntual y no quieras leer todo el archivo
 - `_format_detail_line`: limpia texto opcional de detalle.
 - `_normalize_extra_mode`: normaliza modo de extras (`items` legacy -> `subtitles`).
 - `_entry_items_inline`: junta lista de items en una linea.
+- `_education_items`: decide como renderizar items de educacion con fallback a `honors`.
 
 ### Pipeline principal
 
@@ -571,6 +620,7 @@ Usala cuando necesites tocar una parte puntual y no quieras leer todo el archivo
 
 - `_apply_font`: aplica fuente global al documento completo.
 - `_set_run_font_name`: aplica nombre de fuente a un run.
+- Esta capa tambien sanea estilos/defaults heredados de la plantilla para reducir fuentes residuales.
 
 ### Helpers de tabla y busqueda
 

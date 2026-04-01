@@ -1,12 +1,42 @@
 from __future__ import annotations
 
+import re
+
 from .constants import EMAIL_RE, KNOWN_SECTION_TITLES, PHONE_RE, URL_RE
 from .extract import Line, enrich_features
 
 
 def normalize_section_title(title: str) -> str:
     """Normaliza un titulo de seccion para comparaciones estables."""
-    return " ".join(title.split()).upper()
+    normalized = " ".join(title.split()).strip()
+    normalized = re.sub(r"[:\s]+$", "", normalized)
+    return normalized.upper()
+
+
+def _looks_like_textual_title(line: Line, normalized_text: str) -> bool:
+    """Evalua si una linea parece titulo por su forma textual."""
+    text = line.text.strip()
+    if normalized_text in KNOWN_SECTION_TITLES:
+        return True
+    if line.uppercase_ratio < 0.8:
+        return False
+    if len(text) > 40 or "," in text:
+        return False
+    if any(char.isdigit() for char in text):
+        return False
+    if " - " in text or " – " in text or " — " in text:
+        return False
+    if ":" in text and not text.rstrip().endswith(":"):
+        return False
+
+    allowed_chars = {" ", "&", "/", "+", "-"}
+    if not normalized_text:
+        return False
+    if not any(char.isalpha() for char in normalized_text):
+        return False
+    if not all(char.isalpha() or char in allowed_chars for char in normalized_text):
+        return False
+    return True
 
 
 def _looks_like_visual_title(line: Line) -> bool:
@@ -42,6 +72,7 @@ def _looks_like_visual_title(line: Line) -> bool:
 def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True) -> bool:
     """Determina si una linea debe tratarse como titulo de seccion."""
     text = line.text.strip()
+    normalized_text = normalize_section_title(text)
     if not text:
         return False
     if line.is_bullet:
@@ -53,7 +84,7 @@ def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True)
     # Evita falsos positivos en lineas de contenido tipo "ROL | CIUDAD".
     # Los titulos reales casi nunca usan pipe, mientras que las filas de
     # experiencia/extras si lo usan frecuentemente como separador.
-    if "|" in text and text.upper() not in KNOWN_SECTION_TITLES:
+    if "|" in text and normalized_text not in KNOWN_SECTION_TITLES:
         return False
     if line.has_rule_below:
         return True
@@ -61,11 +92,7 @@ def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True)
         return True
     if not use_text:
         return False
-    if text.upper() in KNOWN_SECTION_TITLES:
-        return True
-    if line.uppercase_ratio >= 0.8 and len(text) <= 40 and "," not in text:
-        return True
-    return False
+    return _looks_like_textual_title(line, normalized_text)
 
 
 def parse_header(lines: list[Line]) -> dict:

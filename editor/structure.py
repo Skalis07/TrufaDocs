@@ -1,6 +1,7 @@
 """Parsing y serializacion de CV entre texto libre, POST y estructura interna."""
 
 import re
+from copy import deepcopy
 from typing import Dict, List, Tuple, Optional, Any
 
 from .structure_constants import DATE_RANGE_RE, EMAIL_RE, PHONE_RE, URL_RE
@@ -66,6 +67,7 @@ def default_structure() -> Dict:
                 "end": "",
                 "city": "",
                 "country": "",
+                "items": [],
                 "honors": "",
             }
         ],
@@ -481,9 +483,15 @@ def structure_from_post(post_data) -> Dict:
     edu_ends = post_data.getlist("edu_end")
     edu_cities = post_data.getlist("edu_city")
     edu_countries = post_data.getlist("edu_country")
+    edu_items = post_data.getlist("edu_items")
     edu_honors = post_data.getlist("edu_honors")
     education = []
     for idx, degree in enumerate(edu_degrees):
+        items_text = edu_items[idx] if idx < len(edu_items) else ""
+        legacy_honors = edu_honors[idx].strip() if idx < len(edu_honors) else ""
+        items = [_clean_bullet(line) for line in items_text.splitlines() if line.strip()]
+        if not items and legacy_honors:
+            items = [_clean_bullet(legacy_honors)]
         education.append(
             {
                 "degree": degree.strip(),
@@ -492,7 +500,8 @@ def structure_from_post(post_data) -> Dict:
                 "end": _normalize_date_token(edu_ends[idx]) if idx < len(edu_ends) else "",
                 "city": edu_cities[idx].strip() if idx < len(edu_cities) else "",
                 "country": edu_countries[idx].strip() if idx < len(edu_countries) else "",
-                "honors": edu_honors[idx].strip() if idx < len(edu_honors) else "",
+                "items": items,
+                "honors": legacy_honors or (items[0] if len(items) == 1 else ""),
             }
         )
     data["education"] = education
@@ -1002,7 +1011,7 @@ def _parse_experience(lines: List[str]) -> List[Dict]:
 
 
 def _parse_education(lines: List[str]) -> List[Dict]:
-    """Parsea la seccion de educacion, incluyendo honors y fechas."""
+    """Parsea la seccion de educacion, incluyendo items libres, honores y fechas."""
     blocks = _group_entries(lines, section="education")
     education: List[Dict] = []
     for block in blocks:
@@ -1013,6 +1022,7 @@ def _parse_education(lines: List[str]) -> List[Dict]:
             "end": "",
             "city": "",
             "country": "",
+            "items": [],
             "honors": "",
         }
         for raw_line in block:
@@ -1031,12 +1041,19 @@ def _parse_education(lines: List[str]) -> List[Dict]:
                     normalized = _normalize_ascii(line)
             if _is_bullet(line):
                 cleaned = _clean_bullet(line)
-                if not item["honors"]:
+                if cleaned:
+                    item["items"].append(cleaned)
+                if cleaned and not item["honors"]:
                     item["honors"] = cleaned
                 continue
             if "honor" in normalized or "mencion" in normalized:
+                raw_honor = line.strip()
                 parts = line.split(":", 1)
-                item["honors"] = parts[1].strip() if len(parts) > 1 else line
+                cleaned = parts[1].strip() if len(parts) > 1 else line
+                if raw_honor:
+                    item["items"].append(raw_honor)
+                if cleaned and not item["honors"]:
+                    item["honors"] = cleaned
                 continue
             if not item["city"]:
                 city, country = _extract_location_from_line(line)
@@ -1055,6 +1072,56 @@ def _parse_education(lines: List[str]) -> List[Dict]:
                 continue
         education.append(item)
     return education or default_structure()["education"]
+
+
+def _normalize_education_items(value: Any) -> List[str]:
+    """Normaliza `education.items` a una lista plana de strings.
+
+    Acepta strings, listas, tuplas y dicts con `text`. Ignora pares/objetos
+    estructurados accidentales para evitar basura como `('city', 'Viña del Mar')`
+    en la UI cuando llega data legacy sin el shape esperado.
+    """
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        candidates = value.splitlines()
+    elif isinstance(value, dict):
+        candidates = [value.get("text", "")]
+    elif isinstance(value, (list, tuple, set)):
+        candidates = list(value)
+    else:
+        candidates = [value]
+
+    normalized: List[str] = []
+    for candidate in candidates:
+        if isinstance(candidate, dict):
+            text = candidate.get("text", "")
+        elif isinstance(candidate, (list, tuple)):
+            # No interpretamos pares estructurados como items visibles.
+            continue
+        else:
+            text = candidate
+        clean = _clean_bullet(str(text or "").strip())
+        if clean:
+            normalized.append(clean)
+    return normalized
+
+
+def _normalize_education_entry(item: Any) -> Dict:
+    """Garantiza shape estable para una entrada de educacion."""
+    base = deepcopy(default_structure()["education"][0])
+    if isinstance(item, dict):
+        base.update(item)
+
+    honors = str(base.get("honors") or "").strip()
+    items = _normalize_education_items(base.get("items"))
+    if not items and honors:
+        items = [_clean_bullet(honors)]
+
+    base["items"] = items
+    base["honors"] = honors or (items[0] if len(items) == 1 else "")
+    return base
 
 
 def _parse_skills(lines: List[str]) -> List[Dict]:
@@ -1139,5 +1206,8 @@ def _ensure_minimums(data: Dict) -> None:
         data["experience"] = default_structure()["experience"]
     if not data.get("education"):
         data["education"] = default_structure()["education"]
+    else:
+        normalized_education = [_normalize_education_entry(item) for item in (data.get("education") or [])]
+        data["education"] = normalized_education or default_structure()["education"]
     if not data.get("skills"):
         data["skills"] = default_structure()["skills"]

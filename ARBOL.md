@@ -29,9 +29,12 @@ Nota: se omite contenido interno de carpetas generadas localmente (`.venv`, cach
 |   |   |-- test_docx_template_skills_pagination.py
 |   |   |-- test_import_module_order.py
 |   |   |-- test_pdf_english_dates_honors.py
-|   |   |-- test_pdf_section_title_detection.py
 |   |   |-- test_pdf_extra_section_parsing.py
+|   |   |-- test_pdf_section_title_detection.py
 |   |   |-- test_structure_from_post.py
+|   |   |-- test_view_education_items.py
+|   |   |-- test_view_exports.py
+|   |   |-- test_view_font_selection.py
 |   |   \-- test_view_localization.py
 |   |-- __init__.py
 |   |-- apps.py
@@ -67,5 +70,5 @@ Nota: se omite contenido interno de carpetas generadas localmente (`.venv`, cach
 - `editor/docx_template.py`: render final sobre la plantilla DOCX.
 - `editor/pdf_parse/*`: extraccion y parseo de PDF.
 - `editor/templates/editor/editor.html`: formulario principal.
-- `editor/static/editor/editor.js`: logica de UI (idioma, tema, reorder, extras, fechas).
-- `editor/tests/*`: regresiones de parsing, orden y localizacion.
+- `editor/static/editor/editor.js`: logica de UI (idioma, tema, reorder de modulos/entries/hitos/skills, extras, fechas).
+- `editor/tests/*`: regresiones de parsing, export, fuentes, orden y localizacion.

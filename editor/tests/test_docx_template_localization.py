@@ -69,6 +69,7 @@ class DocxTemplateLocalizationTests(SimpleTestCase):
                     "end": "2022-12",
                     "city": "Santiago",
                     "country": "Chile",
+                    "items": ["Honors: Magna Cum Laude", "Thesis with distinction"],
                     "honors": "Magna Cum Laude",
                 }
             ],
@@ -81,10 +82,12 @@ class DocxTemplateLocalizationTests(SimpleTestCase):
         doc = DocxDocument(io.BytesIO(output))
         table = doc.tables[0]
 
-        self.assertTrue(_contains_heading(table, "PROFESSIONAL EXPERIENCE"))
+        self.assertTrue(_contains_heading(table, "EXPERIENCE"))
         self.assertTrue(_contains_heading(table, "EDUCATION"))
         self.assertTrue(_contains_heading(table, "SKILLS"))
 
         all_rows = " | ".join(_row_text(row) for row in table.rows)
         self.assertIn("Present", all_rows)
         self.assertIn("Honors:", all_rows)
+        self.assertIn("Magna Cum Laude", all_rows)
+        self.assertIn("Thesis with distinction", all_rows)

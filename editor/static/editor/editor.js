@@ -58,7 +58,6 @@
       section_document: "Documento",
       section_basics: "Datos básicos",
       label_source: "Fuente",
-      option_template_font: "Fuente de la plantilla",
       label_name: "Nombre",
       label_profile: "Descripción / Perfil",
       label_email: "Correo",
@@ -75,9 +74,9 @@
       move_up: "Subir",
       move_down: "Bajar",
       add_action: "Agregar",
-      module_experience: "Experiencia",
-      module_education: "Educación",
-      module_skills: "Habilidades",
+      module_experience: "EXPERIENCIA",
+      module_education: "EDUCACIÓN",
+      module_skills: "HABILIDADES",
       module_add_extra: "Agregar módulo extra",
       module_extra_pill: "Extra",
       untitled_module: "(sin título)",
@@ -103,7 +102,6 @@
       label_degree: "Título",
       label_institution: "Dónde",
       label_in_progress: "En curso",
-      label_honors: "Honores",
       label_subtitle: "Subtítulo",
       label_items_optional: "Items (opcional)",
       label_module_name: "Nombre de módulo",
@@ -134,7 +132,6 @@
       section_document: "DOCUMENT",
       section_basics: "BASIC INFO",
       label_source: "Source",
-      option_template_font: "Template font",
       label_name: "Name",
       label_profile: "Summary / Profile",
       label_email: "Email",
@@ -151,7 +148,7 @@
       move_up: "Move up",
       move_down: "Move down",
       add_action: "Add",
-      module_experience: "PROFESSIONAL EXPERIENCE",
+      module_experience: "EXPERIENCE",
       module_education: "EDUCATION",
       module_skills: "SKILLS",
       module_add_extra: "ADD EXTRA MODULE",
@@ -179,7 +176,6 @@
       label_degree: "Degree",
       label_institution: "Institution",
       label_in_progress: "In progress",
-      label_honors: "Honors",
       label_subtitle: "Subtitle",
       label_items_optional: "Items (optional)",
       label_module_name: "Module name",
@@ -261,6 +257,176 @@
     });
   };
 
+  const REPEAT_LIST_DEFS = [
+    { selector: "#experience-list", itemSelector: ".repeat", labelKey: "repeat_experience" },
+    { selector: "#education-list", itemSelector: ".repeat", labelKey: "repeat_education" },
+    { selector: "#skills-list", itemSelector: ".repeat", labelKey: "repeat_category" },
+    { selector: "[data-extra-entries]", itemSelector: "[data-extra-entry]", labelKey: "repeat_entry" },
+  ];
+
+  const getScopedMatches = (scope, selector) => {
+    const matches = [];
+    if (scope instanceof Element && scope.matches(selector)) {
+      matches.push(scope);
+    }
+    return matches.concat(qsa(selector, scope));
+  };
+
+  const getRepeatItems = (listEl, itemSelector) =>
+    Array.from(listEl.children).filter((node) => node instanceof Element && node.matches(itemSelector));
+
+  const findRepeatListDef = (listEl) =>
+    REPEAT_LIST_DEFS.find((def) => listEl && listEl.matches(def.selector)) || null;
+
+  const refreshRepeatList = (listEl, def) => {
+    if (!listEl || !def) return;
+    const upTitle = t("move_up");
+    const downTitle = t("move_down");
+
+    getRepeatItems(listEl, def.itemSelector).forEach((item, index, items) => {
+      const labelNode = qs(".repeat-header > span", item);
+      if (labelNode) {
+        labelNode.textContent = `${t(def.labelKey)} ${index + 1}`;
+      }
+
+      const upButton = qs('[data-repeat-move="up"]', item);
+      const downButton = qs('[data-repeat-move="down"]', item);
+
+      if (upButton) {
+        upButton.disabled = index === 0;
+        upButton.setAttribute("title", upTitle);
+        upButton.setAttribute("aria-label", upTitle);
+      }
+      if (downButton) {
+        downButton.disabled = index === items.length - 1;
+        downButton.setAttribute("title", downTitle);
+        downButton.setAttribute("aria-label", downTitle);
+      }
+    });
+  };
+
+  const refreshRepeatControls = (scope = document) => {
+    REPEAT_LIST_DEFS.forEach((def) => {
+      getScopedMatches(scope, def.selector).forEach((listEl) => refreshRepeatList(listEl, def));
+    });
+  };
+
+  const REPEAT_REORDER_ANIM_MS = 420;
+  const REPEAT_FOLLOW_SCROLL_MS = 720;
+  let repeatFollowScrollRaf = 0;
+
+  const repeatEaseInOutCubic = (t) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const smoothRepeatScrollWindowTo = (targetY, durationMs = REPEAT_FOLLOW_SCROLL_MS) => {
+    const clampedTarget = Math.max(0, targetY);
+    const startY = window.scrollY || window.pageYOffset || 0;
+    const distance = clampedTarget - startY;
+    if (Math.abs(distance) < 1) return;
+
+    const prefersReduced =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      window.scrollTo(0, clampedTarget);
+      return;
+    }
+
+    if (repeatFollowScrollRaf) {
+      window.cancelAnimationFrame(repeatFollowScrollRaf);
+      repeatFollowScrollRaf = 0;
+    }
+
+    const startTs = performance.now();
+    const step = (ts) => {
+      const progress = Math.min(1, (ts - startTs) / durationMs);
+      const eased = repeatEaseInOutCubic(progress);
+      window.scrollTo(0, startY + distance * eased);
+      if (progress < 1) {
+        repeatFollowScrollRaf = window.requestAnimationFrame(step);
+      } else {
+        repeatFollowScrollRaf = 0;
+      }
+    };
+    repeatFollowScrollRaf = window.requestAnimationFrame(step);
+  };
+
+  const snapshotRepeatPositions = (listEl, itemSelector) => {
+    const map = new Map();
+    getRepeatItems(listEl, itemSelector).forEach((el) => map.set(el, el.getBoundingClientRect()));
+    return map;
+  };
+
+  const animateRepeatReorder = (listEl, itemSelector, beforePositions) => {
+    if (!beforePositions || !beforePositions.size) return;
+    getRepeatItems(listEl, itemSelector).forEach((el) => {
+      const before = beforePositions.get(el);
+      if (!before) return;
+      const after = el.getBoundingClientRect();
+      const deltaY = before.top - after.top;
+      if (Math.abs(deltaY) < 1) return;
+
+      el.style.transition = "none";
+      el.style.transform = `translateY(${deltaY}px)`;
+      el.classList.add("repeat-reorder-active");
+      void el.offsetHeight;
+      el.style.transition = `transform ${REPEAT_REORDER_ANIM_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
+      el.style.transform = "";
+
+      const cleanup = () => {
+        el.style.transition = "";
+        el.classList.remove("repeat-reorder-active");
+      };
+      el.addEventListener("transitionend", cleanup, { once: true });
+      window.setTimeout(cleanup, REPEAT_REORDER_ANIM_MS + 40);
+    });
+  };
+
+  const followMovedRepeatItem = (item) => {
+    if (!item) return;
+    const rect = item.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const topComfort = Math.max(88, vh * 0.14);
+    const bottomComfort = Math.min(vh - 88, vh * 0.82);
+    let delta = 0;
+
+    if (rect.top < topComfort) {
+      delta = rect.top - topComfort;
+    } else if (rect.bottom > bottomComfort) {
+      delta = rect.bottom - bottomComfort;
+    }
+    if (Math.abs(delta) < 20) return;
+
+    const targetTop = window.scrollY + delta;
+    smoothRepeatScrollWindowTo(targetTop, REPEAT_FOLLOW_SCROLL_MS);
+  };
+
+  const moveRepeatItem = (item, dir) => {
+    const listEl = item ? item.parentElement : null;
+    const def = findRepeatListDef(listEl);
+    if (!listEl || !def) return;
+
+    const items = getRepeatItems(listEl, def.itemSelector);
+    const index = items.indexOf(item);
+    if (index < 0) return;
+    const beforePositions = snapshotRepeatPositions(listEl, def.itemSelector);
+
+    if (dir === "up") {
+      if (index === 0) return;
+      listEl.insertBefore(item, items[index - 1]);
+    } else if (dir === "down") {
+      if (index >= items.length - 1) return;
+      const next = items[index + 1];
+      const nextSibling = next.nextElementSibling;
+      if (nextSibling) listEl.insertBefore(item, nextSibling);
+      else listEl.appendChild(item);
+    }
+
+    refreshRepeatControls(listEl);
+    followMovedRepeatItem(item);
+    animateRepeatReorder(listEl, def.itemSelector, beforePositions);
+  };
+
   // Sincroniza el texto visible del picker con el nombre real del archivo elegido.
   const refreshFilePickerLabel = (picker) => {
     const input = qs("[data-file-input]", picker);
@@ -314,10 +480,6 @@
     setSectionHeadingByFieldName("doc_font", "section_document", scope);
     setSectionHeadingByFieldName("name", "section_basics", scope);
     setFieldLabelByName("doc_font", "label_source", scope);
-    qsa('select[name="doc_font"]', scope).forEach((select) => {
-      const firstOption = select.querySelector('option[value=""]');
-      if (firstOption) firstOption.textContent = t("option_template_font");
-    });
 
     setFieldLabelByName("name", "label_name", scope);
     setFieldLabelByName("description", "label_profile", scope);
@@ -359,6 +521,10 @@
 
     setButtonTitleBySelector('[data-move="up"]', "move_up", scope);
     setButtonTitleBySelector('[data-move="down"]', "move_down", scope);
+    setButtonTitleBySelector('[data-repeat-move="up"]', "move_up", scope);
+    setButtonTitleBySelector('[data-repeat-move="down"]', "move_down", scope);
+    setButtonTitleBySelector('[data-highlight-move="up"]', "move_up", scope);
+    setButtonTitleBySelector('[data-highlight-move="down"]', "move_down", scope);
     setButtonTitleBySelector('[data-action="add-extra-module"]', "add_action", scope);
 
     setRepeatHeaderPrefix("#experience-list .repeat-header > span", "repeat_experience", scope);
@@ -392,7 +558,7 @@
     setFieldLabelByName("edu_end", "label_end_date", scope);
     setFieldLabelByName("edu_country", "label_country", scope);
     setFieldLabelByName("edu_city", "label_city", scope);
-    setFieldLabelByName("edu_honors", "label_honors", scope);
+    setFieldLabelByName("edu_items", "label_items_optional", scope);
 
     setFieldLabelByName("skill_category", "label_subtitle", scope);
     setFieldLabelByName("skill_items", "label_items_optional", scope);
@@ -430,6 +596,8 @@
     setCheckboxLabelText("#experience-list .date-current", "label_current_role", scope);
     setCheckboxLabelText("#education-list .date-current", "label_in_progress", scope);
     setCheckboxLabelText("[data-extra-entry] .date-current", "label_present", scope);
+    refreshRepeatControls(scope);
+    refreshHighlightControls(scope);
   };
 
   // Traduce placeholders de selectores de fecha (Mes/Ano y abreviaturas de meses).
@@ -543,6 +711,197 @@
   ];
 
   // Helpers para la lista de "hitos" en experiencia
+  const HIGHLIGHT_REORDER_ANIM_MS = 320;
+  const HIGHLIGHT_FOLLOW_SCROLL_MS = 620;
+  let highlightFollowScrollRaf = 0;
+
+  const getHighlightRows = (listEl) =>
+    Array.from(listEl.children).filter((node) => node instanceof Element && node.matches(".highlight-row"));
+
+  const createHighlightMoveButton = (dir) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn-move";
+    button.dataset.highlightMove = dir;
+    button.textContent = dir === "up" ? "▲" : "▼";
+    const title = t(dir === "up" ? "move_up" : "move_down");
+    button.setAttribute("title", title);
+    button.setAttribute("aria-label", title);
+    return button;
+  };
+
+  const ensureHighlightRowControls = (row) => {
+    if (!row) return;
+    const input =
+      qs(".highlight-input", row) ||
+      Array.from(row.children).find((node) => node instanceof HTMLInputElement);
+    if (input) input.classList.add("highlight-input");
+
+    let actions = qs(".highlight-row-actions", row);
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "highlight-row-actions";
+    }
+
+    let upButton = qs('[data-highlight-move="up"]', actions) || qs('[data-highlight-move="up"]', row);
+    if (!upButton) upButton = createHighlightMoveButton("up");
+
+    let downButton =
+      qs('[data-highlight-move="down"]', actions) || qs('[data-highlight-move="down"]', row);
+    if (!downButton) downButton = createHighlightMoveButton("down");
+
+    let remove = qs("[data-remove-highlight]", actions) || qs("[data-remove-highlight]", row);
+    if (!remove) {
+      remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "ghost small";
+      remove.dataset.removeHighlight = "";
+      remove.textContent = t("action_delete");
+    } else {
+      remove.classList.add("ghost", "small");
+    }
+
+    actions.replaceChildren(upButton, downButton, remove);
+    if (actions.parentElement !== row) row.appendChild(actions);
+  };
+
+  const refreshHighlightBlock = (block) => {
+    if (!block) return;
+    const list = qs(".highlight-list", block);
+    if (!list) return;
+    const upTitle = t("move_up");
+    const downTitle = t("move_down");
+
+    getHighlightRows(list).forEach((row, index, rows) => {
+      ensureHighlightRowControls(row);
+      const upButton = qs('[data-highlight-move="up"]', row);
+      const downButton = qs('[data-highlight-move="down"]', row);
+      if (upButton) {
+        upButton.disabled = index === 0;
+        upButton.setAttribute("title", upTitle);
+        upButton.setAttribute("aria-label", upTitle);
+      }
+      if (downButton) {
+        downButton.disabled = index === rows.length - 1;
+        downButton.setAttribute("title", downTitle);
+        downButton.setAttribute("aria-label", downTitle);
+      }
+    });
+  };
+
+  const refreshHighlightControls = (scope = document) => {
+    getScopedMatches(scope, "[data-highlight-block]").forEach((block) => refreshHighlightBlock(block));
+  };
+
+  const smoothHighlightScrollWindowTo = (targetY, durationMs = HIGHLIGHT_FOLLOW_SCROLL_MS) => {
+    const clampedTarget = Math.max(0, targetY);
+    const startY = window.scrollY || window.pageYOffset || 0;
+    const distance = clampedTarget - startY;
+    if (Math.abs(distance) < 1) return;
+
+    const prefersReduced =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      window.scrollTo(0, clampedTarget);
+      return;
+    }
+
+    if (highlightFollowScrollRaf) {
+      window.cancelAnimationFrame(highlightFollowScrollRaf);
+      highlightFollowScrollRaf = 0;
+    }
+
+    const startTs = performance.now();
+    const step = (ts) => {
+      const progress = Math.min(1, (ts - startTs) / durationMs);
+      const eased = repeatEaseInOutCubic(progress);
+      window.scrollTo(0, startY + distance * eased);
+      if (progress < 1) {
+        highlightFollowScrollRaf = window.requestAnimationFrame(step);
+      } else {
+        highlightFollowScrollRaf = 0;
+      }
+    };
+    highlightFollowScrollRaf = window.requestAnimationFrame(step);
+  };
+
+  const snapshotHighlightPositions = (listEl) => {
+    const map = new Map();
+    getHighlightRows(listEl).forEach((row) => map.set(row, row.getBoundingClientRect()));
+    return map;
+  };
+
+  const animateHighlightReorder = (listEl, beforePositions) => {
+    if (!beforePositions || !beforePositions.size) return;
+    getHighlightRows(listEl).forEach((row) => {
+      const before = beforePositions.get(row);
+      if (!before) return;
+      const after = row.getBoundingClientRect();
+      const deltaY = before.top - after.top;
+      if (Math.abs(deltaY) < 1) return;
+
+      row.style.transition = "none";
+      row.style.transform = `translateY(${deltaY}px)`;
+      row.classList.add("highlight-reorder-active");
+      void row.offsetHeight;
+      row.style.transition = `transform ${HIGHLIGHT_REORDER_ANIM_MS}ms cubic-bezier(0.22, 0.61, 0.36, 1)`;
+      row.style.transform = "";
+
+      const cleanup = () => {
+        row.style.transition = "";
+        row.classList.remove("highlight-reorder-active");
+      };
+      row.addEventListener("transitionend", cleanup, { once: true });
+      window.setTimeout(cleanup, HIGHLIGHT_REORDER_ANIM_MS + 40);
+    });
+  };
+
+  const followMovedHighlightRow = (row) => {
+    if (!row) return;
+    const rect = row.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const topComfort = Math.max(110, vh * 0.16);
+    const bottomComfort = Math.min(vh - 110, vh * 0.9);
+    let delta = 0;
+
+    if (rect.top < topComfort) {
+      delta = rect.top - topComfort;
+    } else if (rect.bottom > bottomComfort) {
+      delta = rect.bottom - bottomComfort;
+    }
+    if (Math.abs(delta) < 12) return;
+
+    const targetTop = window.scrollY + delta;
+    smoothHighlightScrollWindowTo(targetTop, HIGHLIGHT_FOLLOW_SCROLL_MS);
+  };
+
+  const moveHighlightRow = (row, dir) => {
+    const listEl = row ? row.parentElement : null;
+    if (!listEl || !listEl.matches(".highlight-list")) return;
+
+    const rows = getHighlightRows(listEl);
+    const index = rows.indexOf(row);
+    if (index < 0) return;
+    const beforePositions = snapshotHighlightPositions(listEl);
+
+    if (dir === "up") {
+      if (index === 0) return;
+      listEl.insertBefore(row, rows[index - 1]);
+    } else if (dir === "down") {
+      if (index >= rows.length - 1) return;
+      const next = rows[index + 1];
+      const nextSibling = next.nextElementSibling;
+      if (nextSibling) listEl.insertBefore(row, nextSibling);
+      else listEl.appendChild(row);
+    }
+
+    const block = row.closest("[data-highlight-block]");
+    refreshHighlightBlock(block);
+    followMovedHighlightRow(row);
+    animateHighlightReorder(listEl, beforePositions);
+  };
+
   // Crea una fila editable de highlight (input + boton eliminar).
   const highlightRow = (value = "") => {
     const row = document.createElement("div");
@@ -553,14 +912,8 @@
     input.className = "highlight-input";
     input.value = value;
 
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "ghost small";
-    remove.dataset.removeHighlight = ""; // -> data-remove-highlight
-    remove.textContent = t("action_delete");
-
     row.appendChild(input);
-    row.appendChild(remove);
+    ensureHighlightRowControls(row);
     return row;
   };
 
@@ -571,6 +924,7 @@
     if (list.children.length === 0) {
       list.appendChild(highlightRow());
     }
+    refreshHighlightBlock(block);
   };
 
   // Fechas: guardamos YYYY o YYYY-MM en un input hidden
@@ -829,6 +1183,7 @@
         initExtraEntry(node, sectionId);
         applyExtraMode(section);
         applyUiLanguage(section);
+        refreshRepeatControls(entriesRoot);
       });
     }
   };
@@ -905,6 +1260,7 @@ addHandlers.forEach(({ button, list, tpl }) => {
       .forEach((block) => ensureHighlightRows(block));
     initDateFields(listEl);
     applyUiLanguage(listEl);
+    refreshRepeatControls(listEl);
   });
 });
   document
@@ -934,12 +1290,28 @@ addHandlers.forEach(({ button, list, tpl }) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
+    if (target.matches("[data-repeat-move]")) {
+      const repeat = target.closest("[data-extra-entry], .repeat");
+      if (!repeat) return;
+      moveRepeatItem(repeat, target.getAttribute("data-repeat-move"));
+      return;
+    }
+
     if (target.matches("[data-add-highlight]")) {
       const block = target.closest("[data-highlight-block]");
       if (!block) return;
       const list = block.querySelector(".highlight-list");
       if (!list) return;
       list.appendChild(highlightRow());
+      refreshHighlightBlock(block);
+      followMovedHighlightRow(list.lastElementChild);
+      return;
+    }
+
+    if (target.matches("[data-highlight-move]")) {
+      const row = target.closest(".highlight-row");
+      if (!row) return;
+      moveHighlightRow(row, target.getAttribute("data-highlight-move"));
       return;
     }
 
@@ -948,13 +1320,17 @@ addHandlers.forEach(({ button, list, tpl }) => {
       if (!row || !row.parentElement) return;
       const list = row.parentElement;
       list.removeChild(row);
+      const block = list.closest("[data-highlight-block]");
+      refreshHighlightBlock(block);
       return;
     }
 
     if (target.matches("[data-remove]")) {
       const repeat = target.closest(".repeat");
       if (repeat && repeat.parentElement) {
-        repeat.parentElement.removeChild(repeat);
+        const listEl = repeat.parentElement;
+        listEl.removeChild(repeat);
+        refreshRepeatControls(listEl);
       }
     }
   });

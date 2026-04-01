@@ -26,25 +26,25 @@ def _base_querydict() -> QueryDict:
 
     # El parser espera al menos una fila por cada familia de modulos core.
     for key in [
-        "experience_role",
-        "experience_company",
-        "experience_technologies",
-        "experience_start",
-        "experience_end",
-        "experience_city",
-        "experience_country",
-        "experience_highlights",
+        "exp_role",
+        "exp_company",
+        "exp_tech",
+        "exp_start",
+        "exp_end",
+        "exp_city",
+        "exp_country",
+        "exp_highlights",
     ]:
         query_dict.appendlist(key, "")
 
     for key in [
-        "education_degree",
-        "education_institution",
-        "education_start",
-        "education_end",
-        "education_city",
-        "education_country",
-        "education_honors",
+        "edu_degree",
+        "edu_institution",
+        "edu_start",
+        "edu_end",
+        "edu_city",
+        "edu_country",
+        "edu_items",
     ]:
         query_dict.appendlist(key, "")
 
@@ -55,6 +55,25 @@ def _base_querydict() -> QueryDict:
 
 class StructureFromPostSparseItemsTests(SimpleTestCase):
     """Garantiza que arrays sparsos de extras mantengan alineacion por seccion."""
+
+    def test_education_items_are_split_from_multiline_input(self) -> None:
+        """Educacion debe serializar `edu_items` como lista, con fallback legacy a honors."""
+        query_dict = _base_querydict()
+
+        query_dict.setlist("edu_degree", ["Ingeniería"])
+        query_dict.setlist("edu_institution", ["Universidad X"])
+        query_dict.setlist("edu_start", ["2018-03"])
+        query_dict.setlist("edu_end", ["2022-12"])
+        query_dict.setlist("edu_city", ["Santiago"])
+        query_dict.setlist("edu_country", ["Chile"])
+        query_dict.setlist("edu_items", ["Magna Cum Laude\nTesis destacada"])
+
+        structured = structure_from_post(query_dict)
+        education = structured.get("education") or []
+
+        self.assertEqual(len(education), 1)
+        self.assertEqual(education[0].get("items"), ["Magna Cum Laude", "Tesis destacada"])
+        self.assertEqual(education[0].get("honors"), "")
 
     def test_sparse_mode_specific_items_do_not_shift_between_sections(self) -> None:
         """Los arrays por modo no deben correrse entre secciones al normalizar."""

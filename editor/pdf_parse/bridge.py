@@ -9,6 +9,7 @@ from .extract import extract_lines
 from .parsers import parse_education, parse_experience, parse_skills
 
 from .. import structure
+from ..structure_extras import _split_items_text
 from ..structure_types import ExtraLine, ExtraSectionRaw
 
 REMOTE_LOCATION_HINTS = {
@@ -148,7 +149,13 @@ def _map_education(blocks: list[dict]) -> list[dict]:
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
         city, country = _map_location(block.get("location") or "")
-        honors = _strip_prefix(block.get("honors") or "", HONORS_PREFIX_RE)
+        raw_honors = str(block.get("honors") or "").strip()
+        honors = _strip_prefix(raw_honors, HONORS_PREFIX_RE)
+        items: list[str] = []
+        if raw_honors:
+            items.extend(_split_items_text(raw_honors))
+        for extra in block.get("extra", []) or []:
+            items.extend(_split_items_text(str(extra or "")))
         mapped.append(
             {
                 "degree": block.get("program") or "",
@@ -157,6 +164,7 @@ def _map_education(blocks: list[dict]) -> list[dict]:
                 "end": end,
                 "city": city,
                 "country": country,
+                "items": items,
                 "honors": honors,
             }
         )

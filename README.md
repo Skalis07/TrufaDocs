@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Django](https://img.shields.io/badge/Django-6.0.2-darkgreen)
-![Status](https://img.shields.io/badge/Status-Terminado-red)
+![Status](https://img.shields.io/badge/Status-Funcional-green)
 ![Type](https://img.shields.io/badge/App-Django%20Web%20Tool-1f6feb)
 
 Aplicacion web en Django para importar CVs (`.docx` / `.pdf`), normalizarlos a una estructura editable y exportarlos a DOCX/PDF.
@@ -29,11 +29,13 @@ Documentacion principal:
 ## Estado actual
 
 - Parser de CV con schema unico (`basics`, `experience`, `education`, `skills`, `extra_sections`).
-- UI ES/EN con mensajes localizados y persistencia de idioma.
-- Reorden de modulos con preservacion de `core_order`.
-- Export DOCX por plantilla (`templates/cv_template.docx`).
+- Educacion con `items` genericos y `honors` como compatibilidad legacy.
+- UI ES/EN con mensajes localizados, headings core en mayusculas y persistencia de idioma.
+- Reorden de modulos, entradas core/extras, hitos y categorias de skills.
+- Export DOCX por plantilla (`templates/cv_template.docx`) con fuente seleccionada aplicada globalmente.
 - Export PDF via `docx2pdf` (requiere Microsoft Word en Windows/macOS).
-- Suite de tests enfocada en regresiones de parsing, localizacion y orden.
+- Parser PDF endurecido para headings legacy/nuevos y lineas con `:` como `Honors:`, `Honores:` o `GPA:`.
+- Suite de tests enfocada en regresiones de parsing, export, fuentes, localizacion y orden.
 
 ## Caracteristicas
 
@@ -41,9 +43,11 @@ Documentacion principal:
 - Deteccion heuristica de campos
 - Formulario estructurado para edicion manual
 - Preservacion de orden de modulos (core + extras)
+- Reorden de experiencias, educacion, entradas extra, hitos y skills desde la UI
 - Exportacion a DOCX usando plantilla
 - Exportacion a PDF mediante Word + `docx2pdf`
 - Exportacion localizada de encabezados core (ES/EN)
+- Seleccion de fuente de exportacion con aplicacion global en el documento final
 
 ## Stack
 
@@ -131,6 +135,15 @@ Produccion (seguridad):
 ```bash
 python manage.py test editor.tests
 ```
+
+Cobertura actual de regresiones:
+
+- Parseo PDF en ES/EN, incluyendo `Honors:` / `Honores:` / `GPA:`
+- Orden de modulos core + extras
+- Export DOCX/PDF desde POST estructurado
+- Aplicacion global de fuente en DOCX exportado
+- Localizacion ES/EN de UI y export
+- Normalizacion de `education.items` y compatibilidad legacy
 
 ## Limitaciones conocidas
 

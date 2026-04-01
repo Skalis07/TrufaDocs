@@ -578,6 +578,21 @@ p {
   width: 100%;
 }
 
+.highlight-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.highlight-row-actions .btn-move {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
 .highlight-actions {
   display: flex;
   justify-content: flex-start;
@@ -923,6 +938,7 @@ button[data-remove]:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
   font-size: 13px;
   color: #1f1a16;
@@ -931,6 +947,37 @@ button[data-remove]:hover {
 
 :root[data-theme="dark"] .repeat-header {
   color: var(--muted);
+}
+
+.repeat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.repeat-actions .btn-move {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.btn-move:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-move:disabled:hover {
+  transform: none;
+}
+
+[data-extra-entry] > [data-extra-entry-show="detailed"] + [data-extra-entry-show="detailed"] {
+  margin-top: 12px;
 }
 
 /* Responsive */
@@ -1019,7 +1066,10 @@ button[data-remove]:hover {
 }
 
 /* Hint de rendimiento durante reorder activo */
-.module-block.module-reorder-active {
+.module-block.module-reorder-active,
+.repeat.repeat-reorder-active,
+[data-extra-entry].repeat-reorder-active,
+.highlight-row.highlight-reorder-active {
   will-change: transform;
 }
 

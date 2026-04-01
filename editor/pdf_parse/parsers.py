@@ -94,6 +94,29 @@ def _looks_like_new_org(line: str) -> bool:
     return True
 
 
+def _looks_like_education_block_start(text: str, entry: dict, next_text: str = "") -> bool:
+    """Detecta el inicio real de una nueva institucion en educacion."""
+    normalized = normalize_spaces(text or "")
+    following = normalize_spaces(next_text or "")
+    if not normalized or not _looks_like_new_org(normalized):
+        return False
+    if _looks_like_honor_line(normalized):
+        return False
+    if ":" in normalized and any(char.isdigit() for char in normalized):
+        return False
+
+    org, location = _split_org_location(normalized)
+    if location and org:
+        return True
+    if bool(entry.get("is_bold")) and not any(char.isdigit() for char in normalized):
+        return True
+
+    next_date_range, _ = _extract_date_from_line(following)
+    if next_date_range and len(normalized) <= 65:
+        return True
+    return False
+
+
 def _looks_like_honor_line(text: str) -> bool:
     """Detecta lineas de honores/distinciones en educacion."""
     normalized = normalize_spaces(text or "")
@@ -251,10 +274,13 @@ def parse_education(raw_lines: list[dict]) -> list[dict]:
             "extra": [],
         }
 
-    for entry in raw_lines:
+    for index, entry in enumerate(raw_lines):
         text = normalize_spaces(entry.get("text", ""))
         if not text:
             continue
+        next_text = ""
+        if index + 1 < len(raw_lines):
+            next_text = normalize_spaces(raw_lines[index + 1].get("text", ""))
 
         is_honor = _looks_like_honor_line(text)
         date_range, remainder = _extract_date_from_line(text)
@@ -268,7 +294,7 @@ def parse_education(raw_lines: list[dict]) -> list[dict]:
             current["org"]
             and (current["program"] or current["date_range"])
             and not is_honor
-            and _looks_like_new_org(text)
+            and _looks_like_education_block_start(text, entry, next_text)
         ):
             current = start_block()
             blocks.append(current)

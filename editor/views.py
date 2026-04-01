@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods
 from docx import Document as DocxDocument
 from .pdf_parse import parse_pdf_to_structure
 from .structure import (
+    _ensure_minimums,
     default_structure,
     parse_resume,
     structure_from_post,
@@ -35,6 +36,7 @@ FONT_CHOICES = [
     "Montserrat",
     "Poppins",
 ]
+DEFAULT_FONT = FONT_CHOICES[0]
 
 CURRENT_YEAR = date.today().year
 YEAR_CHOICES = list(range(CURRENT_YEAR + 5, 1969, -1))
@@ -373,6 +375,7 @@ def _render_text_editor(request, structured, filename="documento", error: str | 
     paises y errores) para no duplicar logica en cada vista.
     """
     # Render principal con datos de la UI
+    _ensure_minimums(structured)
     font_choice = _selected_font(request)
     extra_countries = _extract_structured_countries(structured)
     country_choices = _merge_country_choices(COUNTRY_CHOICES, extra_countries)
@@ -527,18 +530,17 @@ def _template_path() -> Path | None:
 def _selected_font(request) -> str:
     """Lee y valida la fuente seleccionada desde el formulario.
 
-    Solo acepta valores definidos en FONT_CHOICES para evitar entradas
-    arbitrarias y mantener consistencia en la plantilla.
+    Solo acepta valores definidos en FONT_CHOICES. Si no llega una fuente
+    valida, cae en DEFAULT_FONT para mantener una tipografia uniforme en
+    todas las exportaciones.
     """
-    # Solo valida fuentes permitidas
+    # Solo valida fuentes permitidas y usa un default estable.
     if request.method != "POST":
-        return ""
+        return DEFAULT_FONT
     choice = request.POST.get("doc_font", "").strip()
-    if not choice:
-        return ""
     if choice in FONT_CHOICES:
         return choice
-    return ""
+    return DEFAULT_FONT
 
 
 def _normalize_key(text: str) -> str:

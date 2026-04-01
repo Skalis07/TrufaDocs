@@ -13,9 +13,15 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 from docx.text.run import Run
+from lxml import etree
 
 DocxDocumentType: TypeAlias = Any
 ContactPart: TypeAlias = tuple[str, str, str | None, int]
+
+WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+WORD_NAMESPACES = {"w": WORD_NS}
+DRAWING_NAMESPACES = {"a": DRAWING_NS}
 
 EXPORT_TEXT = {
     "es": {
@@ -23,7 +29,6 @@ EXPORT_TEXT = {
         "heading_education": "EDUCACIÓN",
         "heading_skills": "HABILIDADES",
         "present": "Actualidad",
-        "honors_prefix": "Honores",
         "extra_section_prefix": "SECCION EXTRA",
         "months": {
             "01": "Ene",
@@ -41,11 +46,10 @@ EXPORT_TEXT = {
         },
     },
     "en": {
-        "heading_experience": "PROFESSIONAL EXPERIENCE",
+        "heading_experience": "EXPERIENCE",
         "heading_education": "EDUCATION",
         "heading_skills": "SKILLS",
         "present": "Present",
-        "honors_prefix": "Honors",
         "extra_section_prefix": "EXTRA SECTION",
         "months": {
             "01": "Jan",
@@ -105,6 +109,15 @@ def _entry_items_inline(entry: dict) -> str:
     """Convierte la lista de items de una entrada extra a una sola linea con comas."""
     items = [str(item).strip() for item in (entry.get("items") or []) if str(item).strip()]
     return ", ".join(items)
+
+
+def _education_items(item: dict) -> list[str]:
+    """Normaliza items libres de educacion con fallback a `honors` legacy."""
+    items = [str(value).strip() for value in (item.get("items") or []) if str(value).strip()]
+    if items:
+        return items
+    honors = str(item.get("honors") or "").strip()
+    return [honors] if honors else []
 
 
 # --------------------
@@ -846,7 +859,7 @@ def _fill_experience_highlights_row(row, item: dict) -> None:
 
 
 def _fill_education_row(row, item: dict) -> None:
-    """Completa fila de educacion (institucion, grado, honores, ubicacion y fechas)."""
+    """Completa fila de educacion (institucion, grado, items, ubicacion y fechas)."""
     cells = _unique_cells(row)
     if not cells:
         return
@@ -855,9 +868,7 @@ def _fill_education_row(row, item: dict) -> None:
 
     institution = (item.get("institution") or "").strip()
     degree = (item.get("degree") or "").strip()
-    honors = (item.get("honors") or "").strip()
-    honors_line = f"{_export_text()['honors_prefix']}: {honors}" if honors else ""
-    left_lines = _filter_empty_lines([institution, degree, honors_line])
+    left_lines = _filter_empty_lines([institution, degree, *_education_items(item)])
     _set_cell_lines_preserve(left, left_lines, trim_extra_paragraphs=True)
 
     if right is not None:
@@ -1069,7 +1080,7 @@ def _has_education_content(item: dict) -> bool:
         item.get("end"),
         item.get("city"),
         item.get("country"),
-        item.get("honors"),
+        *_education_items(item),
     ]
     return any((str(value).strip() for value in fields if value is not None))
 
@@ -1299,28 +1310,174 @@ def _set_numbering_level_size(doc: DocxDocumentType, num_id: str, ilvl: str, siz
 
 def _apply_font(doc: DocxDocumentType, font_name: str | None) -> None:
     # Aplica la misma fuente a todo el documento
-    """Aplica una fuente global a runs de parrafos y tablas en todo el documento."""
+    """Aplica fuente global a runs, estilos, numbering y theme del documento."""
     if not font_name:
         return
-    for paragraph in doc.paragraphs:
-        for run in paragraph.runs:
-            _set_run_font_name(run, font_name)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    for run in paragraph.runs:
-                        _set_run_font_name(run, font_name)
+
+    seen_parts: set[str] = set()
+    for part in doc.part.package.parts:
+        partname = str(getattr(part, "partname", "") or "")
+        if not partname or partname in seen_parts:
+            continue
+        seen_parts.add(partname)
+
+        root = getattr(part, "element", None)
+        if root is None:
+            root = getattr(part, "_element", None)
+
+        if root is not None and (
+            partname in {
+                "/word/document.xml",
+                "/word/footnotes.xml",
+                "/word/endnotes.xml",
+            }
+            or "header" in partname
+            or "footer" in partname
+        ):
+            _apply_font_to_story_root(root, font_name)
+
+        if partname == "/word/styles.xml":
+            _apply_font_to_styles_root(root, font_name)
+        elif partname == "/word/numbering.xml":
+            _apply_font_to_numbering_root(root, font_name)
+        elif partname == "/word/theme/theme1.xml":
+            _apply_font_to_theme_part(part, font_name)
+        elif partname == "/word/fontTable.xml":
+            _apply_font_to_font_table_part(part, font_name)
+
+
+def _apply_font_to_story_root(root, font_name: str) -> None:
+    """Fuerza rFonts en todos los runs visibles del story XML."""
+    if root is None:
+        return
+    for paragraph in root.iter(qn("w:p")):
+        _set_paragraph_element_font_name(paragraph, font_name)
+    for run in root.iter(qn("w:r")):
+        _set_run_element_font_name(run, font_name)
+
+
+def _apply_font_to_styles_root(styles_root, font_name: str) -> None:
+    """Actualiza docDefaults y estilos para que Word no herede Calibri."""
+    if styles_root is None:
+        return
+
+    doc_defaults = styles_root.find(qn("w:docDefaults"))
+    if doc_defaults is None:
+        doc_defaults = OxmlElement("w:docDefaults")
+        styles_root.insert(0, doc_defaults)
+
+    rpr_default = doc_defaults.find(qn("w:rPrDefault"))
+    if rpr_default is None:
+        rpr_default = OxmlElement("w:rPrDefault")
+        doc_defaults.insert(0, rpr_default)
+
+    default_rpr = rpr_default.find(qn("w:rPr"))
+    if default_rpr is None:
+        default_rpr = OxmlElement("w:rPr")
+        rpr_default.append(default_rpr)
+    _set_rpr_font_name(default_rpr, font_name)
+
+    for style in styles_root.iter(qn("w:style")):
+        rpr = style.find(qn("w:rPr"))
+        if rpr is None:
+            rpr = OxmlElement("w:rPr")
+            style.append(rpr)
+        _set_rpr_font_name(rpr, font_name)
+
+
+def _apply_font_to_numbering_root(numbering_root, font_name: str) -> None:
+    """Fuerza fuente en definiciones de numeracion/bullets."""
+    if numbering_root is None:
+        return
+    for level in numbering_root.iter(qn("w:lvl")):
+        rpr = level.find(qn("w:rPr"))
+        if rpr is None:
+            rpr = OxmlElement("w:rPr")
+            level.append(rpr)
+        _set_rpr_font_name(rpr, font_name)
+
+
+def _apply_font_to_theme_part(theme_part, font_name: str) -> None:
+    """Actualiza major/minor theme fonts para evitar fallback visual a Calibri."""
+    if theme_part is None or not getattr(theme_part, "blob", None):
+        return
+    root = etree.fromstring(theme_part.blob)
+    for node in root.xpath(
+        ".//a:fontScheme/a:majorFont/*[@typeface] | .//a:fontScheme/a:minorFont/*[@typeface]",
+        namespaces=DRAWING_NAMESPACES,
+    ):
+        node.set("typeface", font_name)
+    theme_part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
+
+
+def _apply_font_to_font_table_part(font_table_part, font_name: str) -> None:
+    """Reduce fontTable a la fuente efectiva seleccionada."""
+    if font_table_part is None or not getattr(font_table_part, "blob", None):
+        return
+    root = etree.fromstring(font_table_part.blob)
+    font_nodes = root.xpath(".//w:font", namespaces=WORD_NAMESPACES)
+    selected = None
+    for node in font_nodes:
+        if node.get(qn("w:name")) == font_name:
+            selected = node
+            break
+
+    if selected is None:
+        selected = etree.Element(qn("w:font"))
+        selected.set(qn("w:name"), font_name)
+        root.append(selected)
+
+    for node in list(font_nodes):
+        if node is selected:
+            continue
+        parent = node.getparent()
+        if parent is not None:
+            parent.remove(node)
+
+    alt_name = selected.find(qn("w:altName"))
+    if alt_name is None:
+        alt_name = etree.Element(qn("w:altName"))
+        selected.insert(0, alt_name)
+    alt_name.set(qn("w:val"), font_name)
+
+    font_table_part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone="yes")
 
 
 def _set_run_font_name(run, font_name: str) -> None:
     """Define nombre de fuente en run y en todos los slots rFonts OOXML."""
     run.font.name = font_name
     rpr = run._element.get_or_add_rPr()
-    rfonts = rpr.rFonts
+    _set_rpr_font_name(rpr, font_name)
+
+
+def _set_run_element_font_name(run_element, font_name: str) -> None:
+    """Define nombre de fuente directamente sobre un nodo OOXML w:r."""
+    rpr = run_element.find(qn("w:rPr"))
+    if rpr is None:
+        rpr = OxmlElement("w:rPr")
+        run_element.insert(0, rpr)
+    _set_rpr_font_name(rpr, font_name)
+
+
+def _set_paragraph_element_font_name(paragraph_element, font_name: str) -> None:
+    """Define fuente sobre el paragraph mark (w:pPr/w:rPr)."""
+    ppr = paragraph_element.find(qn("w:pPr"))
+    if ppr is None:
+        ppr = OxmlElement("w:pPr")
+        paragraph_element.insert(0, ppr)
+    rpr = ppr.find(qn("w:rPr"))
+    if rpr is None:
+        rpr = OxmlElement("w:rPr")
+        ppr.append(rpr)
+    _set_rpr_font_name(rpr, font_name)
+
+
+def _set_rpr_font_name(rpr, font_name: str) -> None:
+    """Define rFonts sobre un nodo `w:rPr` para todos los slots tipograficos."""
+    rfonts = rpr.find(qn("w:rFonts"))
     if rfonts is None:
         rfonts = OxmlElement("w:rFonts")
-        rpr.append(rfonts)
+        rpr.insert(0, rfonts)
     rfonts.set(qn("w:ascii"), font_name)
     rfonts.set(qn("w:hAnsi"), font_name)
     rfonts.set(qn("w:eastAsia"), font_name)

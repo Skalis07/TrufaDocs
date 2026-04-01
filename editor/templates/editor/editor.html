@@ -122,7 +122,6 @@
                   <div class="field">
                     <label>Fuente</label>
                     <select name="doc_font">
-                      <option value="" {% if not selected_font %}selected{% endif %}>Fuente de la plantilla</option>
                       {% for font in font_choices %}
                       <option value="{{ font }}" {% if font == selected_font %}selected{% endif %}>{{ font }}</option>
                       {% endfor %}
@@ -184,7 +183,7 @@
                 <!-- Experiencia laboral -->
                 <div class="section-header">
 <div class="module-head" data-module-key="experience">
-  <h2>Experiencia</h2>
+  <h2>EXPERIENCIA</h2>
   <div class="module-move">
     <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
     <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
@@ -196,7 +195,11 @@
                   <div class="repeat">
                     <div class="repeat-header">
                       <span>Experiencia {{ forloop.counter }}</span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -304,7 +307,7 @@
                 <!-- Educación -->
                 <div class="section-header">
                   <div class="module-head" data-module-key="education">
-  <h2>Educación</h2>
+  <h2>EDUCACIÓN</h2>
   <div class="module-move">
     <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
     <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
@@ -316,7 +319,11 @@
                   <div class="repeat">
                     <div class="repeat-header">
                       <span>Educación {{ forloop.counter }}</span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -384,8 +391,33 @@
                         <input type="text" name="edu_city" value="{{ edu.city }}" />
                       </div>
                       <div class="field full">
-                        <label>Honores</label>
-                        <input type="text" name="edu_honors" value="{{ edu.honors }}" />
+                        <label>Items (opcional)</label>
+                        <div class="highlight-block" data-highlight-block>
+                          <div class="highlight-list">
+                            {% if edu.items %}
+                            {% for item in edu.items %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="{{ item }}" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endfor %}
+                            {% elif edu.honors %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="{{ edu.honors }}" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% else %}
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                            {% endif %}
+                          </div>
+                          <div class="highlight-actions">
+                            <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+                          </div>
+                          <textarea name="edu_items" class="highlight-textarea" hidden>{% if edu.items %}{{ edu.items|join:"\n" }}{% elif edu.honors %}{{ edu.honors }}{% endif %}</textarea>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -400,7 +432,7 @@
                 <!-- Habilidades -->
                 <div class="section-header">
                   <div class="module-head" data-module-key="skills">
-  <h2>Habilidades</h2>
+  <h2>HABILIDADES</h2>
   <div class="module-move">
     <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
     <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
@@ -412,7 +444,11 @@
                   <div class="repeat compact">
                     <div class="repeat-header">
                       <span>Categoría {{ forloop.counter }}</span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -437,15 +473,17 @@
               {# --- Extras como módulos movibles --- #}
               {% for extra in structured.extra_sections %}
               <div class="section module-block" data-module-key="{{ extra.section_id|default:forloop.counter0 }}">
-                <div class="module-head" data-module-key="{{ extra.section_id|default:forloop.counter0 }}">
-                  <h2>
-                    <span class="pill pill-extra">Extra</span>
-                    <span data-module-name>{{ extra.title|default:"(sin título)" }}</span>
-                  </h2>
-                  <div class="module-move">
-                    <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
-                    <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
-                    <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+                <div class="section-header">
+                  <div class="module-head" data-module-key="{{ extra.section_id|default:forloop.counter0 }}">
+                    <h2>
+                      <span class="pill pill-extra">Extra</span>
+                      <span data-module-name>{{ extra.title|default:"(sin título)" }}</span>
+                    </h2>
+                    <div class="module-move">
+                      <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+                      <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+                      <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+                    </div>
                   </div>
                 </div>
 
@@ -471,7 +509,11 @@
                     <div class="repeat sub" data-extra-entry>
                       <div class="repeat-header">
                         <span>Entrada {{ forloop.counter }}</span>
-                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                        <div class="repeat-actions">
+                          <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                          <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                          <button type="button" class="ghost small" data-remove>Eliminar</button>
+                        </div>
                       </div>
 
                       <input type="hidden" name="extra_entry_section" value="{{ extra.section_id|default:forloop.parentloop.counter0 }}" />
@@ -483,33 +525,12 @@
 
                       <div class="grid-two" data-extra-entry-show="detailed">
                         <div class="field">
-                          <label>Empresa/Proyecto</label>
-                          <input type="text" name="extra_entry_where" value="{{ entry.where|default:'' }}" />
-                        </div>
-                        <div class="field">
                           <label>Rol/Curso</label>
                           <input type="text" name="extra_entry_title" value="{{ entry.title|default:'' }}" />
                         </div>
-                      </div>
-
-                      <div class="field full" data-extra-entry-show="detailed">
-                        <label>Detalle (opcional)</label>
-                        <input type="text" name="extra_entry_tech" value="{{ entry.tech|default:'' }}" />
-                      </div>
-
-                      <div class="grid-two" data-extra-entry-show="detailed">
                         <div class="field">
-                          <label>País</label>
-                          <select name="extra_entry_country" data-country-select>
-                            <option value="">Selecciona país</option>
-                            {% for country in country_choices %}
-                            <option value="{{ country }}" {% if entry.country == country %}selected{% endif %}>{{ country }}</option>
-                            {% endfor %}
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label>Ciudad</label>
-                          <input type="text" name="extra_entry_city" value="{{ entry.city|default:'' }}" />
+                          <label>Empresa/Proyecto</label>
+                          <input type="text" name="extra_entry_where" value="{{ entry.where|default:'' }}" />
                         </div>
                       </div>
 
@@ -557,6 +578,27 @@
                             </label>
                           </div>
                         </div>
+                      </div>
+
+                      <div class="grid-two" data-extra-entry-show="detailed">
+                        <div class="field">
+                          <label>País</label>
+                          <select name="extra_entry_country" data-country-select>
+                            <option value="">Selecciona país</option>
+                            {% for country in country_choices %}
+                            <option value="{{ country }}" {% if entry.country == country %}selected{% endif %}>{{ country }}</option>
+                            {% endfor %}
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>Ciudad</label>
+                          <input type="text" name="extra_entry_city" value="{{ entry.city|default:'' }}" />
+                        </div>
+                      </div>
+
+                      <div class="field full" data-extra-entry-show="detailed">
+                        <label>Detalle (opcional)</label>
+                        <input type="text" name="extra_entry_tech" value="{{ entry.tech|default:'' }}" />
                       </div>
 
                       <div class="field full" data-extra-entry-show="detailed">
@@ -624,7 +666,11 @@
 <div class="repeat">
                     <div class="repeat-header">
                       <span>Experiencia </span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -717,7 +763,11 @@
 <div class="repeat">
                     <div class="repeat-header">
                       <span>Educación </span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -785,8 +835,19 @@
                         <input type="text" name="edu_city" value="" />
                       </div>
                       <div class="field full">
-                        <label>Honores</label>
-                        <input type="text" name="edu_honors" value="" />
+                        <label>Items (opcional)</label>
+                        <div class="highlight-block" data-highlight-block>
+                          <div class="highlight-list">
+                            <div class="highlight-row">
+                              <input type="text" class="highlight-input" value="" />
+                              <button type="button" class="ghost small" data-remove-highlight>Eliminar</button>
+                            </div>
+                          </div>
+                          <div class="highlight-actions">
+                            <button type="button" class="ghost small add-btn" data-add-highlight>Agregar línea</button>
+                          </div>
+                          <textarea name="edu_items" class="highlight-textarea" hidden></textarea>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -795,7 +856,11 @@
 <div class="repeat compact">
                     <div class="repeat-header">
                       <span>Categoría </span>
-                      <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      <div class="repeat-actions">
+                        <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+                        <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+                        <button type="button" class="ghost small" data-remove>Eliminar</button>
+                      </div>
                     </div>
                     <div class="grid-two">
                       <div class="field">
@@ -812,15 +877,17 @@
 <template id="tpl-extra-module">
       <!-- Template clonable para MÓDULO extra (movible) -->
       <div class="section module-block" data-module-key="">
-        <div class="module-head">
-          <h2>
-            <span class="pill pill-extra">Extra</span>
-            <span data-module-name>(sin título)</span>
-          </h2>
-          <div class="module-move">
-            <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
-            <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
-            <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+        <div class="section-header">
+          <div class="module-head">
+            <h2>
+              <span class="pill pill-extra">Extra</span>
+              <span data-module-name>(sin título)</span>
+            </h2>
+            <div class="module-move">
+              <button type="button" class="btn-move" data-move="up" title="Subir">▲</button>
+              <button type="button" class="btn-move" data-move="down" title="Bajar">▼</button>
+              <button type="button" class="ghost small" data-action="remove-extra-section">Eliminar</button>
+            </div>
           </div>
         </div>
 
@@ -855,7 +922,11 @@
       <div class="repeat sub" data-extra-entry>
         <div class="repeat-header">
           <span>Entrada</span>
-          <button type="button" class="ghost small" data-remove>Eliminar</button>
+          <div class="repeat-actions">
+            <button type="button" class="btn-move" data-repeat-move="up" title="Subir">▲</button>
+            <button type="button" class="btn-move" data-repeat-move="down" title="Bajar">▼</button>
+            <button type="button" class="ghost small" data-remove>Eliminar</button>
+          </div>
         </div>
 
         <input type="hidden" name="extra_entry_section" value="" />
@@ -866,33 +937,12 @@
 
         <div class="grid-two" data-extra-entry-show="detailed">
           <div class="field">
-            <label>Empresa/Proyecto</label>
-            <input type="text" name="extra_entry_where" />
-          </div>
-          <div class="field">
             <label>Rol/Curso</label>
             <input type="text" name="extra_entry_title" />
           </div>
-        </div>
-
-        <div class="field full" data-extra-entry-show="detailed">
-          <label>Detalle (opcional)</label>
-          <input type="text" name="extra_entry_tech" />
-        </div>
-
-        <div class="grid-two" data-extra-entry-show="detailed">
           <div class="field">
-            <label>País</label>
-            <select name="extra_entry_country" data-country-select>
-              <option value="">Selecciona país</option>
-              {% for country in country_choices %}
-              <option value="{{ country }}">{{ country }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label>Ciudad</label>
-            <input type="text" name="extra_entry_city" />
+            <label>Empresa/Proyecto</label>
+            <input type="text" name="extra_entry_where" />
           </div>
         </div>
 
@@ -942,8 +992,27 @@
           </div>
         </div>
 
-        
-        
+        <div class="grid-two" data-extra-entry-show="detailed">
+          <div class="field">
+            <label>País</label>
+            <select name="extra_entry_country" data-country-select>
+              <option value="">Selecciona país</option>
+              {% for country in country_choices %}
+              <option value="{{ country }}">{{ country }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label>Ciudad</label>
+            <input type="text" name="extra_entry_city" />
+          </div>
+        </div>
+
+        <div class="field full" data-extra-entry-show="detailed">
+          <label>Detalle (opcional)</label>
+          <input type="text" name="extra_entry_tech" />
+        </div>
+
         <div class="field full" data-extra-entry-show="detailed">
           <label>Hitos alcanzados (uno por línea)</label>
           <div class="highlight-block" data-highlight-block>
