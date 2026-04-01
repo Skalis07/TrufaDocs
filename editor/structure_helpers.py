@@ -142,7 +142,7 @@ def _looks_like_tech(line: str) -> bool:
             # Muchos tokens con mayúscula inicial (Unity, Pandas, Excel) también es señal.
             title_like_ratio = sum(1 for t in tokens if t[:1].isupper()) / len(tokens)
 
-            # Caso especial de 2 tokens ("Docker, Vercel" vs "Santiago, Chile"):
+            # Caso especial de 2 tokens ("Docker, Vercel" vs "Ciudad, País"):
             # lo tratamos como tech SOLO si hay señales fuertes (abreviaturas en MAYÚSCULA).
             if len(tokens) == 2 and not has_symbols and not looks_like_stack_token:
                 if all(t.strip().isupper() and len(t.strip()) <= 6 for t in tokens):

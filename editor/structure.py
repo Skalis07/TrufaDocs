@@ -1078,7 +1078,7 @@ def _normalize_education_items(value: Any) -> List[str]:
     """Normaliza `education.items` a una lista plana de strings.
 
     Acepta strings, listas, tuplas y dicts con `text`. Ignora pares/objetos
-    estructurados accidentales para evitar basura como `('city', 'Viña del Mar')`
+    estructurados accidentales para evitar basura como `('city', 'Ciudad Demo')`
     en la UI cuando llega data legacy sin el shape esperado.
     """
     if value is None:

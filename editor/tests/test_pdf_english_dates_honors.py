@@ -34,13 +34,13 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
         """Los meses en ingles deben preservarse en `date_range` de experiencia."""
         raw_lines = [
             _line("Example Corp | Remote", is_bold=True),
-            _line("Developer | Jan 2023 – May 2023"),
+            _line("Developer | Jan 2031 – May 2031"),
         ]
 
         blocks = parse_experience(raw_lines)
 
         self.assertEqual(len(blocks), 1)
-        self.assertEqual(blocks[0].get("date_range"), "Jan 2023 – May 2023")
+        self.assertEqual(blocks[0].get("date_range"), "Jan 2031 – May 2031")
         self.assertEqual(blocks[0].get("role"), "Developer")
 
     def test_parse_pdf_education_in_english_maps_dates_and_honors(self) -> None:
@@ -58,11 +58,11 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
                 {
                     "title": "EDUCATION",
                     "raw": [
-                        _line("University X | Santiago, Chile", is_bold=True),
-                        _line("BSc Computer Science | Mar 2017 – Nov 2023"),
+                        _line("University X | City One, Country Demo", is_bold=True),
+                        _line("BSc Computer Science | Apr 2011 – Nov 2015"),
                         _line("Honors: Distinction"),
-                        _line("University Y | Santiago, Chile", is_bold=True),
-                        _line("MSc Data Science | Mar 2023 – Dec 2024"),
+                        _line("University Y | City Two, Country Demo", is_bold=True),
+                        _line("MSc Data Science | Mar 2016 – Dec 2017"),
                         _line("Honors: Magna Cum Laude"),
                     ],
                 }
@@ -78,24 +78,24 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
         self.assertIsNone(error)
         education = structured.get("education") or []
         self.assertEqual(len(education), 2)
-        self.assertEqual(education[0].get("start"), "2017-03")
-        self.assertEqual(education[0].get("end"), "2023-11")
+        self.assertEqual(education[0].get("start"), "2011-04")
+        self.assertEqual(education[0].get("end"), "2015-11")
         self.assertEqual(education[0].get("items"), ["Honors: Distinction"])
         self.assertEqual(education[0].get("honors"), "Distinction")
-        self.assertEqual(education[1].get("start"), "2023-03")
-        self.assertEqual(education[1].get("end"), "2024-12")
+        self.assertEqual(education[1].get("start"), "2016-03")
+        self.assertEqual(education[1].get("end"), "2017-12")
         self.assertEqual(education[1].get("items"), ["Honors: Magna Cum Laude"])
         self.assertEqual(education[1].get("honors"), "Magna Cum Laude")
 
     def test_parse_education_keeps_gpa_as_item_and_not_as_new_block(self) -> None:
         """Lineas cortas como `GPA: 3.8` no deben partir una nueva institucion."""
         raw_lines = [
-            _line("Universidad Andrés Bello | Santiago, Chile", is_bold=True),
-            _line("Magíster en Ciencias de la Computación | Mar 2023 – Dic 2024"),
+            _line("Institución Demo Norte | Ciudad Uno, País Demo", is_bold=True),
+            _line("Magíster en Ciencias Aplicadas | Mar 2016 – Dic 2017"),
             _line("Distinción Magna Cum Laude"),
             _line("GPA: 3.8"),
-            _line("Universidad Andrés Bello | Viña del Mar, Chile", is_bold=True),
-            _line("Ingeniería Civil Informática | Mar 2017 – Nov 2023"),
+            _line("Institución Demo Sur | Ciudad Dos, País Demo", is_bold=True),
+            _line("Ingeniería de Sistemas | Abr 2011 – Nov 2015"),
             _line("Distinción"),
             _line("GPA: 3.3"),
         ]
@@ -103,12 +103,12 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
         blocks = parse_education(raw_lines)
 
         self.assertEqual(len(blocks), 2)
-        self.assertEqual(blocks[0].get("org"), "Universidad Andrés Bello")
-        self.assertEqual(blocks[0].get("location"), "Santiago, Chile")
+        self.assertEqual(blocks[0].get("org"), "Institución Demo Norte")
+        self.assertEqual(blocks[0].get("location"), "Ciudad Uno, País Demo")
         self.assertEqual(blocks[0].get("honors"), "Distinción Magna Cum Laude")
         self.assertEqual(blocks[0].get("extra"), ["GPA: 3.8"])
-        self.assertEqual(blocks[1].get("org"), "Universidad Andrés Bello")
-        self.assertEqual(blocks[1].get("location"), "Viña del Mar, Chile")
+        self.assertEqual(blocks[1].get("org"), "Institución Demo Sur")
+        self.assertEqual(blocks[1].get("location"), "Ciudad Dos, País Demo")
         self.assertEqual(blocks[1].get("honors"), "Distinción")
         self.assertEqual(blocks[1].get("extra"), ["GPA: 3.3"])
 
@@ -127,8 +127,8 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
                 {
                     "title": "EDUCACIÓN",
                     "raw": [
-                        _line("Universidad Andrés Bello | Viña del Mar, Chile", is_bold=True),
-                        _line("Ingeniería Civil Informática | Mar 2017 – Nov 2023"),
+                        _line("Institución Demo Sur | Ciudad Dos, País Demo", is_bold=True),
+                        _line("Ingeniería de Sistemas | Abr 2011 – Nov 2015"),
                         _line("Honores: Distinción"),
                         _line("GPA: 3.3"),
                     ],

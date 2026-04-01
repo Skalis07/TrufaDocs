@@ -44,8 +44,8 @@ class ViewEducationItemsTests(SimpleTestCase):
                     "institution": "Universidad X",
                     "start": "",
                     "end": "",
-                    "city": "Viña del Mar",
-                    "country": "Chile",
+                    "city": "Ciudad Demo",
+                    "country": "País Demo",
                     "honors": "Distinción académica",
                 }
             ],
@@ -57,6 +57,5 @@ class ViewEducationItemsTests(SimpleTestCase):
         html = response.content.decode("utf-8")
 
         self.assertIn("Distinción académica", html)
-        self.assertNotIn("('city', 'Viña del Mar')", html)
-        self.assertNotIn("('country', 'Chile')", html)
-
+        self.assertNotIn("('city', 'Ciudad Demo')", html)
+        self.assertNotIn("('country', 'País Demo')", html)

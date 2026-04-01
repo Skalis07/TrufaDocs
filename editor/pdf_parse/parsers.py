@@ -11,7 +11,23 @@ from .constants import (
 )
 from .extract import calc_comma_density, normalize_spaces
 
-LOCATION_TRAILING_RE = re.compile(r"(Viña del Mar|Santiago),\s*Chile$", re.IGNORECASE)
+LOCATION_TRAILING_RE = re.compile(
+    r"^(?P<city>[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*){0,4}),\s*"
+    r"(?P<country>[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]*){0,4})$",
+    re.IGNORECASE,
+)
+NON_LOCATION_SUFFIXES = {
+    "co",
+    "company",
+    "corp",
+    "gmbh",
+    "inc",
+    "llc",
+    "ltd",
+    "plc",
+    "sa",
+    "spa",
+}
 HONOR_HINT_RE = re.compile(
     r"\b(?:honores?|honors?|honours?|cum\s+laude|distinction|distinci[oó]n|menci[oó]n)\b",
     re.IGNORECASE,
@@ -77,6 +93,9 @@ def _split_org_location(text: str) -> tuple[str, str]:
                     return org, candidate
     match = LOCATION_TRAILING_RE.search(text)
     if match:
+        country = re.sub(r"[.\s]+", "", match.group("country").casefold())
+        if country in NON_LOCATION_SUFFIXES:
+            return text, ""
         location = match.group(0).strip()
         org = text[: match.start()].strip()
         return org, location
