@@ -91,3 +91,122 @@ class PdfExtraSectionParsingTests(SimpleTestCase):
         self.assertEqual(entries[1].get("end"), "2026-02")
         self.assertGreaterEqual(len(entries[0].get("items") or []), 1)
         self.assertGreaterEqual(len(entries[1].get("items") or []), 1)
+
+    def test_publication_like_wrapped_bullet_keeps_subtitle_items_mode(self) -> None:
+        """Un subtítulo largo partido no debe convertir publicaciones en modo detailed."""
+        raw_lines = [
+            _line(
+                "Long Research Title About Generated Features for Imbalanced Medical",
+                is_bullet=True,
+                indent=14,
+                is_bold=True,
+            ),
+            _line("Data", indent=32, is_bold=True),
+            _line(
+                "Author A., Author B., & Author C. Applied AI for Health: Workshop 2025",
+                indent=32,
+            ),
+            _line(
+                "Proceedings, Example Venue. Series 42, 10-20. DOI 10.1000/example",
+                indent=32,
+            ),
+        ]
+
+        section = _parse_extra_section("PUBLICACIONES", raw_lines, 3)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "subtitle_items")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(
+            entries[0].get("subtitle"),
+            "Long Research Title About Generated Features for Imbalanced Medical Data",
+        )
+        self.assertEqual(
+            entries[0].get("items"),
+            [
+                "Author A., Author B., & Author C. Applied AI for Health: Workshop 2025 Proceedings, Example Venue. Series 42, 10-20. DOI 10.1000/example",
+            ],
+        )
+
+    def test_publication_inline_reference_does_not_split_after_trailing_comma(self) -> None:
+        """Una referencia corrida no debe convertirse en dos líneas por una coma final."""
+        raw_lines = [
+            _line("Generic Publication Title", is_bullet=True, indent=14, is_bold=True),
+            _line("Author A., Author B. Example Conference 2025,"),
+            _line("Proceedings, Example Venue. Pages 10-20. DOI 10.1000/example"),
+        ]
+
+        section = _parse_extra_section("PUBLICACIONES", raw_lines, 4)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "subtitle_items")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(
+            entries[0].get("items"),
+            [
+                "Author A., Author B. Example Conference 2025, Proceedings, Example Venue. Pages 10-20. DOI 10.1000/example"
+            ],
+        )
+
+    def test_publication_inline_reference_does_not_split_after_trailing_semicolon(self) -> None:
+        """Una referencia corrida tampoco debe partirse si la línea previa termina en `;`."""
+        raw_lines = [
+            _line("Generic Publication Title", is_bullet=True, indent=14, is_bold=True),
+            _line("Author A., Author B. Example Conference 2025;"),
+            _line("Proceedings, Example Venue. Pages 10-20. DOI 10.1000/example"),
+        ]
+
+        section = _parse_extra_section("PUBLICACIONES", raw_lines, 5)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "subtitle_items")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(
+            entries[0].get("items"),
+            [
+                "Author A., Author B. Example Conference 2025; Proceedings, Example Venue. Pages 10-20. DOI 10.1000/example"
+            ],
+        )
+
+    def test_publication_inline_reference_does_not_split_after_year_without_separator(self) -> None:
+        """Una continuación bibliográfica no debe partirse aunque la línea previa termine en año."""
+        raw_lines = [
+            _line("Generic Publication Title Part One", is_bullet=True, indent=14, is_bold=True),
+            _line("Part Two", indent=32, is_bold=True),
+            _line("Author A., Author B. Example Conference / Example Event 2025", indent=32),
+            _line("Workshops, Example City, Example Country. Series 42, 132 – 148. DOI 10.1000/example", indent=32),
+        ]
+
+        section = _parse_extra_section("PUBLICACIONES", raw_lines, 6)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "subtitle_items")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].get("subtitle"), "Generic Publication Title Part One Part Two")
+        self.assertEqual(
+            entries[0].get("items"),
+            [
+                "Author A., Author B. Example Conference / Example Event 2025 Workshops, Example City, Example Country. Series 42, 132-148. DOI 10.1000/example"
+            ],
+        )
+
+    def test_publication_doi_colon_is_preserved_inside_reference(self) -> None:
+        """`DOI:` dentro de una referencia no debe separarse ni perder los dos puntos."""
+        raw_lines = [
+            _line("Generic Publication Title", is_bullet=True, indent=14, is_bold=True),
+            _line("Part Two", indent=32, is_bold=True),
+            _line("Author A., Author B. Example Conference 2025", indent=32),
+            _line("Workshops, Example City, Example Country. Series 42, 132-148. DOI: 10.1000/example", indent=32),
+        ]
+
+        section = _parse_extra_section("PUBLICACIONES", raw_lines, 7)
+        entries = section.get("entries") or []
+
+        self.assertEqual(section.get("mode"), "subtitle_items")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(
+            entries[0].get("items"),
+            [
+                "Author A., Author B. Example Conference 2025 Workshops, Example City, Example Country. Series 42, 132-148. DOI: 10.1000/example"
+            ],
+        )

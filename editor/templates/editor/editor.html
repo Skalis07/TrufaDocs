@@ -628,7 +628,8 @@
 
                       <div class="field full" data-extra-entry-show="subtitle_items">
                         <label>Items (opcional)</label>
-                        <textarea name="extra_entry_items_si" rows="3">{{ entry.items|join:"; " }}</textarea>
+                        <textarea name="extra_entry_items_si" rows="3">{% for item in entry.items %}{{ item }}{% if not forloop.last %}
+{% endif %}{% endfor %}</textarea>
                       </div>
                     </div>
                     {% endfor %}

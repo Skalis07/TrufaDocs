@@ -151,6 +151,69 @@ def _split_items_text(raw_text: str) -> List[str]:
 
     return [item for item in items if item]
 
+
+def _normalize_extra_item_text(text: str) -> str:
+    """Normaliza texto libre de items preservando referencias corridas."""
+    normalized = str(text or "").strip()
+    if not normalized:
+        return ""
+    return re.sub(r"(?<=\d)\s*[–—-]\s*(?=\d)", "-", normalized)
+
+
+def _looks_like_reference_item_continuation(previous_item: str, current_item: str) -> bool:
+    """Detecta cuando una referencia bibliográfica sigue en la línea siguiente."""
+    previous = _normalize_extra_item_text(previous_item)
+    current = _normalize_extra_item_text(current_item)
+    if not previous or not current:
+        return False
+
+    if previous.endswith((",", ";", ":", "(", "[", "{")):
+        return True
+
+    if re.search(r"\bdoi:?$", previous, re.IGNORECASE):
+        return True
+
+    if re.search(r"[.!?…)\]]$", previous):
+        return False
+
+    if not re.search(r"\b(?:19|20)\d{2}\b", previous):
+        return False
+
+    if re.search(r"\bdoi\b", current, re.IGNORECASE):
+        return True
+
+    if "," in current:
+        return True
+
+    return False
+
+
+def _looks_like_extra_label_prefix(text: str) -> bool:
+    """Distingue etiquetas cortas (`Honores:`) de texto libre con dos puntos."""
+    candidate = str(text or "").strip()
+    if not candidate:
+        return False
+    if any(token in candidate for token in (",", ";", ".", "/", "DOI", "doi")):
+        return False
+    words = [word for word in candidate.split() if word]
+    return 1 <= len(words) <= 4
+
+
+def _merge_continued_extra_items(items: List[str]) -> List[str]:
+    """Fusiona items consecutivos cuando el anterior quedó abierto por corte de línea."""
+    merged: List[str] = []
+    for raw_item in items or []:
+        item = _normalize_extra_item_text(raw_item)
+        if not item:
+            continue
+        if merged:
+            previous = merged[-1].rstrip()
+            if previous.endswith((",", ";", ":", "(", "[", "{")) or _looks_like_reference_item_continuation(previous, item):
+                merged[-1] = f"{previous} {item}".strip()
+                continue
+        merged.append(item)
+    return merged
+
 def _extract_line_payload(raw_line: Any) -> Tuple[str, Dict[str, Any]]:
     """Normaliza una linea cruda (str o dict) al par (texto, metadatos)."""
     if isinstance(raw_line, dict):
@@ -511,6 +574,65 @@ def _merge_extra_entries(core_entry: Dict, loc_entry: Dict) -> Dict:
     return merged
 
 
+def _merge_subtitle_with_following_sparse_detail(subtitle_entry: Dict, detail_entry: Dict) -> Dict:
+    """Une un subtítulo partido con un falso detailed sin contexto real."""
+    merged = _empty_extra_entry()
+    left = (subtitle_entry.get("subtitle") or "").strip()
+    right = (detail_entry.get("title") or "").strip()
+    detail_where = (detail_entry.get("where") or "").strip()
+    if right and (not detail_where or len(right.split()) <= 3):
+        merged["subtitle"] = f"{left} {right}".strip()
+    else:
+        merged["subtitle"] = left
+
+    items: List[str] = []
+    if right and detail_where and len(right.split()) > 3:
+        items.append(right)
+    tech = (detail_entry.get("tech") or "").strip()
+    if tech:
+        items.append(tech)
+    detail_subtitle = (detail_entry.get("subtitle") or "").strip()
+    if detail_subtitle:
+        items.append(detail_subtitle)
+    where = detail_where
+    if where:
+        items.append(where)
+    for item in detail_entry.get("items") or []:
+        cleaned = str(item).strip()
+        if cleaned:
+            items.append(cleaned)
+    merged["items"] = items
+    return merged
+
+
+def _should_merge_wrapped_subtitle_with_detail(first: Dict, second: Dict) -> bool:
+    """Detecta subtítulos envueltos que el parser confundió con entrada detailed."""
+    if not (_is_subtitle_only_extra_entry(first) and _is_detailed_extra_entry(second)):
+        return False
+    if any((second.get(key) or "").strip() for key in ("start", "end", "city", "country")):
+        return False
+    if not (second.get("title") or "").strip():
+        return False
+    if not ((second.get("tech") or "").strip() or any(str(item).strip() for item in (second.get("items") or []))):
+        return False
+    return True
+
+
+def _should_merge_subtitle_items_with_following_subtitle(first: Dict, second: Dict) -> bool:
+    """Une una entrada subtitle_items con una línea suelta que continúa sus items."""
+    if not first or not second:
+        return False
+    if _is_detailed_extra_entry(first) or _is_detailed_extra_entry(second):
+        return False
+    if not (first.get("subtitle") or "").strip():
+        return False
+    if not any(str(item).strip() for item in (first.get("items") or [])):
+        return False
+    if not _is_subtitle_only_extra_entry(second):
+        return False
+    return True
+
+
 def _should_merge_extra_entries(first: Dict, second: Dict) -> bool:
     """Decide si dos entradas consecutivas deben fusionarse."""
     if not (_is_sparse_extra_entry(first) and _is_sparse_extra_entry(second)):
@@ -574,6 +696,20 @@ def _merge_extra_entry_fragments(entries: List[Dict]) -> List[Dict]:
             merged.append(merged_entry)
             idx += 2
             continue
+        if nxt and _should_merge_wrapped_subtitle_with_detail(current, nxt):
+            merged.append(_merge_subtitle_with_following_sparse_detail(current, nxt))
+            idx += 2
+            continue
+        if nxt and _should_merge_subtitle_items_with_following_subtitle(current, nxt):
+            merged_entry = dict(current)
+            merged_items = [str(item).strip() for item in (merged_entry.get("items") or []) if str(item).strip()]
+            subtitle_item = (nxt.get("subtitle") or "").strip()
+            if subtitle_item:
+                merged_items.append(subtitle_item)
+            merged_entry["items"] = merged_items
+            merged.append(merged_entry)
+            idx += 2
+            continue
         if nxt and _should_merge_extra_entries(current, nxt):
             if _entry_has_core(current):
                 merged_entry = _merge_extra_entries(current, nxt)
@@ -584,6 +720,8 @@ def _merge_extra_entry_fragments(entries: List[Dict]) -> List[Dict]:
             continue
         merged.append(current)
         idx += 1
+    if len(merged) < len(entries):
+        return _merge_extra_entry_fragments(merged)
     return merged
 
 # --------------------
@@ -615,6 +753,14 @@ def _should_start_new_extra_entry(
     if DATE_RANGE_RE.search(line):
         if entry.get("start") or entry.get("end"):
             return True
+        return False
+
+    if (
+        (entry.get("subtitle") or "").strip()
+        and not any((entry.get(key) or "").strip() for key in ("title", "where", "tech", "start", "end", "city", "country"))
+        and items
+        and _looks_like_reference_item_continuation(items[-1], line)
+    ):
         return False
 
     # Entrada detallada en curso sin "tech": una línea libre no-boldeada y
@@ -763,6 +909,9 @@ def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
             # Modo subtítulo(+items): si ya tenemos subtítulo y NO hay campos de detalle,
             # toda línea no-bullet se considera item (no se parsea como ubicación).
             if (entry.get("subtitle") or "").strip() and not any(entry.get(k) for k in ["title", "where", "tech", "start", "end", "city", "country"]):
+                if items and _looks_like_reference_item_continuation(items[-1], line):
+                    items = _merge_continued_extra_items([*items[:-1], items[-1], _clean_bullet(line)])
+                    continue
                 if not DATE_RANGE_RE.search(line) and not _is_heading(line):
                     for _part in _split_escaped_newlines(_clean_bullet(line)):
                         items.append(_part)
@@ -966,7 +1115,7 @@ def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
                 continue
             if ":" in line and not entry["subtitle"]:
                 left, right = line.split(":", 1)
-                if right.strip():
+                if right.strip() and _looks_like_extra_label_prefix(left):
                     entry["subtitle"] = left.strip()
                     items.extend(_split_items_text(right))
                     continue
@@ -992,9 +1141,11 @@ def _parse_extra_entries(lines: List[Any]) -> List[Dict]:
                 continue
             for _part in _split_escaped_newlines(_clean_bullet(line)):
                 items.append(_part)
-        entry["items"] = [item for item in items if item]
+        entry["items"] = _merge_continued_extra_items([item for item in items if item])
         entries.append(entry)
     entries = _merge_extra_entry_fragments(entries)
+    for entry in entries:
+        entry["items"] = _merge_continued_extra_items(entry.get("items") or [])
     return entries or [_empty_extra_entry()]
 
 

@@ -149,3 +149,40 @@ class StructureFromPostSparseItemsTests(SimpleTestCase):
         self.assertEqual(
             subtitle_items_section["entries"][2].get("subtitle"), "SDFSDFJ12,2 ,4123,412,"
         )
+
+    def test_current_tokens_are_normalized_to_is_current_for_any_language(self) -> None:
+        """`Present`/`Actualidad` deben guardar fin vacío + flag `is_current`."""
+        query_dict = _base_querydict()
+
+        query_dict.setlist("exp_role", ["Engineer"])
+        query_dict.setlist("exp_company", ["ACME"])
+        query_dict.setlist("exp_start", ["2023-01"])
+        query_dict.setlist("exp_end", ["Present"])
+
+        query_dict.setlist("edu_degree", ["Computer Science"])
+        query_dict.setlist("edu_institution", ["University X"])
+        query_dict.setlist("edu_start", ["2020-03"])
+        query_dict.setlist("edu_end", ["Actualidad"])
+
+        query_dict.appendlist("extra_section_id", "extra-1")
+        query_dict.appendlist("extra_title", "Projects")
+        query_dict.appendlist("extra_mode", "detailed")
+        query_dict.appendlist("extra_entry_section", "extra-1")
+        query_dict.appendlist("extra_entry_title", "Lead")
+        query_dict.appendlist("extra_entry_where", "Platform")
+        query_dict.appendlist("extra_entry_start", "2024-01")
+        query_dict.appendlist("extra_entry_end", "Present")
+        query_dict.appendlist("extra_entry_city", "")
+        query_dict.appendlist("extra_entry_country", "")
+        query_dict.appendlist("extra_entry_tech", "")
+        query_dict.appendlist("extra_entry_items_detailed", "")
+
+        structured = structure_from_post(query_dict)
+
+        self.assertEqual(structured["experience"][0].get("end"), "")
+        self.assertTrue(structured["experience"][0].get("is_current"))
+        self.assertEqual(structured["education"][0].get("end"), "")
+        self.assertTrue(structured["education"][0].get("is_current"))
+        extra_entry = structured["extra_sections"][0]["entries"][0]
+        self.assertEqual(extra_entry.get("end"), "")
+        self.assertTrue(extra_entry.get("is_current"))

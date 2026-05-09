@@ -57,6 +57,31 @@ def _strip_bullet_markers(text: str) -> tuple[str, bool]:
     return normalize_spaces(stripped), is_bullet
 
 
+def _looks_like_skill_continuation(
+    previous_value: str,
+    current_value: str,
+    *,
+    previous_indent: float,
+    current_indent: float,
+) -> bool:
+    """Detecta wraps de una skill cuando la siguiente linea continúa abajo."""
+    previous = normalize_spaces(previous_value or "")
+    current = normalize_spaces(current_value or "")
+    if not previous or not current:
+        return False
+    if previous.count("(") > previous.count(")"):
+        return True
+    if previous.count("[") > previous.count("]"):
+        return True
+    if current[:1].isupper() or current.isupper():
+        return False
+    if any(token in current for token in (",", ":", "|", "/", "\\")):
+        return False
+    if current_indent <= (previous_indent + 1.5):
+        return False
+    return True
+
+
 def _infer_bullet_indents(raw_lines: list[dict]) -> tuple[float, float]:
     """Infiere indentacion de bullet y de continuacion por bloque."""
     indents = sorted({float(entry.get("indent", 0.0)) for entry in raw_lines if entry.get("indent", 0.0) > 0})
@@ -359,10 +384,36 @@ def parse_skills(raw_lines: list[dict]) -> list[dict]:
     groups: list[dict] = []
     current: dict | None = None
 
+    def append_value(value: str, *, indent: float, separator: str = " ") -> None:
+        """Agrega un valor al grupo actual, fusionando wraps conservadores."""
+        nonlocal current
+        normalized = normalize_spaces(value)
+        if not normalized:
+            return
+
+        if current is None:
+            current = {"group_title": "OTRAS", "values": [], "_value_indents": []}
+            groups.append(current)
+
+        values = current.setdefault("values", [])
+        value_indents = current.setdefault("_value_indents", [])
+        if values and _looks_like_skill_continuation(
+            values[-1],
+            normalized,
+            previous_indent=float(value_indents[-1]),
+            current_indent=indent,
+        ):
+            values[-1] = normalize_spaces(f"{values[-1]}{separator}{normalized}")
+            return
+
+        values.append(normalized)
+        value_indents.append(indent)
+
     for entry in raw_lines:
         raw_text = normalize_spaces(entry.get("text", ""))
         if not raw_text:
             continue
+        indent = float(entry.get("indent", 0.0))
         segments = [normalize_spaces(part) for part in raw_text.split("|") if normalize_spaces(part)]
         if len(segments) > 1:
             for segment in segments:
@@ -372,13 +423,9 @@ def parse_skills(raw_lines: list[dict]) -> list[dict]:
                 comma_density = calc_comma_density(segment_text)
 
                 if segment_is_bullet:
-                    current = {"group_title": segment_text, "values": []}
+                    current = {"group_title": segment_text, "values": [], "_value_indents": []}
                     groups.append(current)
                     continue
-
-                if current is None:
-                    current = {"group_title": "OTRAS", "values": []}
-                    groups.append(current)
 
                 if comma_density >= 0.01:
                     parts = [
@@ -386,9 +433,10 @@ def parse_skills(raw_lines: list[dict]) -> list[dict]:
                         for part in segment_text.split(",")
                         if normalize_spaces(part)
                     ]
-                    current["values"].extend(parts)
+                    for part in parts:
+                        append_value(part, indent=indent, separator=", ")
                 else:
-                    current["values"].append(segment_text)
+                    append_value(segment_text, indent=indent)
             continue
 
         is_bullet = bool(entry.get("is_bullet")) or raw_text.strip().endswith(BULLET_CHARS)
@@ -396,21 +444,19 @@ def parse_skills(raw_lines: list[dict]) -> list[dict]:
         comma_density = calc_comma_density(raw_text)
 
         if is_bullet:
-            current = {"group_title": label, "values": []}
+            current = {"group_title": label, "values": [], "_value_indents": []}
             groups.append(current)
             continue
 
-        if current is None:
-            current = {"group_title": "OTRAS", "values": []}
-            groups.append(current)
-
         if comma_density >= 0.01:
             parts = [normalize_spaces(part) for part in raw_text.split(",") if normalize_spaces(part)]
-            current["values"].extend(parts)
+            for part in parts:
+                append_value(part, indent=indent, separator=", ")
         else:
-            current["values"].append(raw_text)
+            append_value(raw_text, indent=indent)
 
     for group in groups:
+        group.pop("_value_indents", None)
         seen: set[str] = set()
         values: list[str] = []
         for value in group["values"]:

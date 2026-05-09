@@ -169,3 +169,16 @@ class ViewExportSmokeTests(SimpleTestCase):
         self.assertTrue(fonts_by_xml)
         for xml_name, font_names in fonts_by_xml.items():
             self.assertEqual(font_names, {"STIX Two Text"}, msg=xml_name)
+
+    def test_export_docx_english_localizes_current_end_from_post_token(self) -> None:
+        """Si el POST trae `Present`, la exportación EN debe renderizar `Present`, no `Actualidad`."""
+        payload = _export_payload()
+        payload["exp_end"] = ["Present"]
+        payload["edu_end"] = ["Present"]
+
+        response = self.client.post(DOCX_EXPORT_URL, payload)
+
+        self.assertEqual(response.status_code, 200)
+        exported_text = _docx_text(response.content)
+        self.assertIn("Present", exported_text)
+        self.assertNotIn("Actualidad", exported_text)

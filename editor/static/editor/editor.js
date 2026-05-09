@@ -668,6 +668,7 @@
     updateUiLangInputs();
     localizeDateSelectors(scope);
     setFixedUiTexts(scope);
+    qsa("[data-date-field][data-date-end]", scope).forEach((block) => syncDateField(block));
     initFilePickers(scope);
     updateLanguageButtons();
     updateThemeButtons();
@@ -949,7 +950,7 @@
 
     const forceCurrent = block.dataset.forceCurrent === "1";
     if (forceCurrent) {
-      hidden.value = "Actualidad";
+      hidden.value = getLang() === "en" ? "Present" : "Actualidad";
       monthSelect.disabled = true;
       yearSelect.disabled = true;
       return;

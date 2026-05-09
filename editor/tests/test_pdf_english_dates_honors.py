@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from editor.pdf_parse.bridge import parse_pdf_to_structure
-from editor.pdf_parse.parsers import parse_education, parse_experience
+from editor.pdf_parse.parsers import parse_education, parse_experience, parse_skills
 
 
 def _line(
@@ -147,3 +147,121 @@ class PdfEnglishDatesHonorsTests(SimpleTestCase):
         self.assertEqual(len(education), 1)
         self.assertEqual(education[0].get("items"), ["Honores: Distinción", "GPA: 3.3"])
         self.assertEqual(education[0].get("honors"), "Distinción")
+
+    def test_parse_skills_merges_indented_lowercase_wrap(self) -> None:
+        """Una skill partida hacia abajo debe recomponerse sin crear item extra."""
+        raw_lines = [
+            _line("Herramientas", is_bullet=True),
+            _line("Excel"),
+            _line("tablas"),
+            _line("dinámicas", indent=18.0),
+            _line("Power BI"),
+        ]
+
+        groups = parse_skills(raw_lines)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].get("group_title"), "Herramientas")
+        self.assertEqual(groups[0].get("values"), ["Excel", "tablas dinámicas", "Power BI"])
+
+    def test_parse_skills_does_not_merge_regular_separate_values(self) -> None:
+        """Skills separadas en líneas normales deben seguir separadas."""
+        raw_lines = [
+            _line("Herramientas", is_bullet=True),
+            _line("Excel"),
+            _line("SQL"),
+            _line("Power BI"),
+        ]
+
+        groups = parse_skills(raw_lines)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].get("values"), ["Excel", "SQL", "Power BI"])
+
+    def test_parse_skills_merges_wrapped_parenthetical_item_same_indent(self) -> None:
+        """Un item con paréntesis abierto debe continuar aunque el indent no cambie."""
+        raw_lines = [
+            _line("Bases de Datos y BI", is_bullet=True),
+            _line("PostgreSQL, Power BI (Power Query), Excel (macros, tablas"),
+            _line("dinámicas)"),
+        ]
+
+        groups = parse_skills(raw_lines)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(
+            groups[0].get("values"),
+            ["PostgreSQL", "Power BI (Power Query)", "Excel (macros, tablas dinámicas)"],
+        )
+
+    def test_parse_pdf_skills_merges_wrapped_item_in_structured_output(self) -> None:
+        """El flujo PDF completo debe exportar la skill recompuesta."""
+        assembled = {
+            "header": {
+                "name": "Persona Ejemplo",
+                "email": "",
+                "phone": "",
+                "links": [],
+                "location": "",
+            },
+            "header_lines": [],
+            "sections": [
+                {
+                    "title": "HABILIDADES",
+                    "raw": [
+                        _line("Herramientas", is_bullet=True),
+                        _line("Excel"),
+                        _line("tablas"),
+                        _line("dinámicas", indent=18.0),
+                        _line("Power BI"),
+                    ],
+                }
+            ],
+        }
+
+        with (
+            patch("editor.pdf_parse.bridge.extract_lines", return_value=[object()]),
+            patch("editor.pdf_parse.bridge.assemble_sections", return_value=assembled),
+        ):
+            structured, error = parse_pdf_to_structure(io.BytesIO(b"fake"))
+
+        self.assertIsNone(error)
+        self.assertEqual(
+            structured.get("skills"),
+            [{"category": "Herramientas", "items": "Excel, tablas dinámicas, Power BI"}],
+        )
+
+    def test_parse_pdf_skills_merges_real_parenthetical_wrap_in_structured_output(self) -> None:
+        """El flujo PDF debe recomponer items partidos dentro de paréntesis."""
+        assembled = {
+            "header": {
+                "name": "Persona Ejemplo",
+                "email": "",
+                "phone": "",
+                "links": [],
+                "location": "",
+            },
+            "header_lines": [],
+            "sections": [
+                {
+                    "title": "HABILIDADES",
+                    "raw": [
+                        _line("Bases de Datos y BI", is_bullet=True),
+                        _line("PostgreSQL, Power BI (Power Query), Excel (macros, tablas"),
+                        _line("dinámicas)"),
+                    ],
+                }
+            ],
+        }
+
+        with (
+            patch("editor.pdf_parse.bridge.extract_lines", return_value=[object()]),
+            patch("editor.pdf_parse.bridge.assemble_sections", return_value=assembled),
+        ):
+            structured, error = parse_pdf_to_structure(io.BytesIO(b"fake"))
+
+        self.assertIsNone(error)
+        self.assertEqual(
+            structured.get("skills"),
+            [{"category": "Bases de Datos y BI", "items": "PostgreSQL, Power BI (Power Query), Excel (macros, tablas dinámicas)"}],
+        )

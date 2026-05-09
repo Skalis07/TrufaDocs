@@ -451,6 +451,10 @@ def structure_from_post(post_data) -> Dict:
     core_order_raw = (post_data.get("core_order", "") or "").strip()
     module_order_map_raw = (post_data.get("module_order_map", "") or "").strip()
 
+    def _is_current_date_token(value: str) -> bool:
+        """Detecta tokens de fecha abierta enviados por la UI en cualquier idioma."""
+        return bool(re.match(r"^(actualidad|actual|presente|present|current|hoy)$", str(value or "").strip(), re.IGNORECASE))
+
     exp_roles = post_data.getlist("exp_role")
     exp_companies = post_data.getlist("exp_company")
     exp_starts = post_data.getlist("exp_start")
@@ -463,12 +467,15 @@ def structure_from_post(post_data) -> Dict:
     for idx, role in enumerate(exp_roles):
         highlights_text = exp_highlights[idx] if idx < len(exp_highlights) else ""
         highlights = [_clean_bullet(line) for line in highlights_text.splitlines() if line.strip()]
+        raw_end = exp_ends[idx] if idx < len(exp_ends) else ""
+        is_current = _is_current_date_token(raw_end)
         experience.append(
             {
                 "role": role.strip(),
                 "company": exp_companies[idx].strip() if idx < len(exp_companies) else "",
                 "start": _normalize_date_token(exp_starts[idx]) if idx < len(exp_starts) else "",
-                "end": _normalize_date_token(exp_ends[idx]) if idx < len(exp_ends) else "",
+                "end": "" if is_current else _normalize_date_token(raw_end),
+                "is_current": is_current,
                 "city": exp_cities[idx].strip() if idx < len(exp_cities) else "",
                 "country": exp_countries[idx].strip() if idx < len(exp_countries) else "",
                 "technologies": exp_techs[idx].strip() if idx < len(exp_techs) else "",
@@ -492,12 +499,15 @@ def structure_from_post(post_data) -> Dict:
         items = [_clean_bullet(line) for line in items_text.splitlines() if line.strip()]
         if not items and legacy_honors:
             items = [_clean_bullet(legacy_honors)]
+        raw_end = edu_ends[idx] if idx < len(edu_ends) else ""
+        is_current = _is_current_date_token(raw_end)
         education.append(
             {
                 "degree": degree.strip(),
                 "institution": edu_institutions[idx].strip() if idx < len(edu_institutions) else "",
                 "start": _normalize_date_token(edu_starts[idx]) if idx < len(edu_starts) else "",
-                "end": _normalize_date_token(edu_ends[idx]) if idx < len(edu_ends) else "",
+                "end": "" if is_current else _normalize_date_token(raw_end),
+                "is_current": is_current,
                 "city": edu_cities[idx].strip() if idx < len(edu_cities) else "",
                 "country": edu_countries[idx].strip() if idx < len(edu_countries) else "",
                 "items": items,
@@ -687,15 +697,7 @@ def structure_from_post(post_data) -> Dict:
                     cursor_key="start",
                 )
             ),
-            "end": _normalize_date_token(
-                _entry_field_value(
-                    entry_ends,
-                    idx,
-                    entry_mode=entry_mode,
-                    field_mode="detailed",
-                    cursor_key="end",
-                )
-            ),
+            "end": "",
             "city": _entry_field_value(
                 entry_cities,
                 idx,
@@ -712,6 +714,16 @@ def structure_from_post(post_data) -> Dict:
             ).strip(),
             "items": parse_items(raw_items),
         }
+        raw_entry_end = _entry_field_value(
+            entry_ends,
+            idx,
+            entry_mode=entry_mode,
+            field_mode="detailed",
+            cursor_key="end",
+        )
+        entry["is_current"] = _is_current_date_token(raw_entry_end)
+        if not entry["is_current"]:
+            entry["end"] = _normalize_date_token(raw_entry_end)
 
         # Si la sección está en modo Sub+Item y viene sin subtítulo pero con items,
         # usamos el primer item como subtítulo (y dejamos el resto como items).

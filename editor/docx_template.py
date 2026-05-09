@@ -1027,6 +1027,8 @@ def _format_date_token(value: str | None) -> str:
     value = (value or "").strip()
     if not value:
         return ""
+    if re.match(r"^(actualidad|actual|presente|present|current|hoy)$", value, re.IGNORECASE):
+        return _export_text()["present"]
     match = re.match(r"^(?P<year>\d{4})-(?P<month>\d{2})$", value)
     if match:
         month = _export_text()["months"].get(match.group("month"), match.group("month"))

@@ -59,3 +59,65 @@ class ViewEducationItemsTests(SimpleTestCase):
         self.assertIn("Distinción académica", html)
         self.assertNotIn("('city', 'Ciudad Demo')", html)
         self.assertNotIn("('country', 'País Demo')", html)
+
+    def test_render_subtitle_items_textarea_preserves_line_breaks_without_semicolons(self) -> None:
+        """La UI debe cargar items subtitle_items uno por línea, no unidos con `;`."""
+        request = self.factory.get("/")
+        structured = {
+            "meta": {"core_order": "experience,education,skills,extra-1"},
+            "basics": {
+                "name": "",
+                "description": "",
+                "email": "",
+                "phone": "",
+                "linkedin": "",
+                "github": "",
+                "city": "",
+                "country": "",
+            },
+            "experience": [
+                {
+                    "role": "",
+                    "company": "",
+                    "start": "",
+                    "end": "",
+                    "city": "",
+                    "country": "",
+                    "technologies": "",
+                    "highlights": [],
+                }
+            ],
+            "education": [],
+            "skills": [{"category": "", "items": ""}],
+            "extra_sections": [
+                {
+                    "section_id": "extra-1",
+                    "title": "Publicaciones",
+                    "mode": "subtitle_items",
+                    "entries": [
+                        {
+                            "subtitle": "Título genérico",
+                            "items": [
+                                "Referencia uno con comas, pero sin separador artificial",
+                                "Referencia dos independiente",
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        response = _render_text_editor(request, structured, filename="documento")
+        html = response.content.decode("utf-8")
+
+        marker = 'name="extra_entry_items_si" rows="3">'
+        self.assertIn(marker, html)
+        textarea_value = html.split(marker, 1)[1].split("</textarea>", 1)[0]
+
+        self.assertIn("Referencia uno con comas, pero sin separador artificial", textarea_value)
+        self.assertIn("Referencia dos independiente", textarea_value)
+        self.assertIn("\n", textarea_value)
+        self.assertNotIn(
+            'Referencia uno con comas, pero sin separador artificial; Referencia dos independiente',
+            html,
+        )
