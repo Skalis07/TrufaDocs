@@ -37,6 +37,8 @@ EDUCATION_SECTION_TITLES = {
 }
 
 SKILLS_SECTION_TITLES = {
+    "APTITUDES PRINCIPALES",
+    "TOP SKILLS",
     "HABILIDADES",
     "SKILLS",
     "COMPETENCIAS",
@@ -67,10 +69,15 @@ def _map_date_range(date_range: str) -> tuple[str, str]:
     return start, end
 
 
-def _map_location(value: str) -> tuple[str, str]:
+def _map_location(value: str, trusted: bool = False) -> tuple[str, str]:
     """Mapea una ubicacion libre a (ciudad, pais)."""
     if not value:
         return "", ""
+    if trusted:
+        if "," in value:
+            city, country = value.rsplit(",", 1)
+            return city.strip(), country.strip()
+        return value.strip(), ""
     city, country = structure._parse_location(value)
     return city, country
 
@@ -118,7 +125,7 @@ def _map_experience(blocks: list[dict]) -> list[dict]:
     mapped: list[dict] = []
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
-        city, country = _map_location(block.get("location") or "")
+        city, country = _map_location(block.get("location") or "", bool(block.get("positioned")))
         technologies = _map_tech(block.get("meta_tech") or "")
         highlights: list[str] = []
         for item in block.get("items", []):
@@ -148,7 +155,7 @@ def _map_education(blocks: list[dict]) -> list[dict]:
     mapped: list[dict] = []
     for block in blocks:
         start, end = _map_date_range(block.get("date_range") or "")
-        city, country = _map_location(block.get("location") or "")
+        city, country = _map_location(block.get("location") or "", bool(block.get("positioned")))
         raw_honors = str(block.get("honors") or "").strip()
         honors = _strip_prefix(raw_honors, HONORS_PREFIX_RE)
         items: list[str] = []
@@ -206,7 +213,7 @@ def _map_extra_entries_from_experience(blocks: list[dict]) -> list[dict]:
         where, inline_location = _split_org_with_inline_location(where_raw)
         where = where or where_raw
 
-        city, country = _map_location(block.get("location") or "")
+        city, country = _map_location(block.get("location") or "", bool(block.get("positioned")))
         if not city and inline_location:
             city, country = _map_location(inline_location)
             if not city and not country and inline_location.lower() in REMOTE_LOCATION_HINTS:
@@ -357,7 +364,7 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
 
     header_location = header.get("location")
     if header_location:
-        city, country = _map_location(header_location)
+        city, country = _map_location(header_location, bool(assembled.get("column_layout")))
         basics["city"] = city
         basics["country"] = country
 
@@ -378,6 +385,33 @@ def parse_pdf_to_structure(file_obj) -> tuple[dict, str | None]:
         title = section.get("title") or ""
         normalized_title = _normalize_section_title(title)
         raw_lines = section.get("raw") or []
+
+        if normalized_title in {"EXTRACTO", "SUMMARY", "RESUMEN", "PERFIL"}:
+            summary = " ".join(entry["text"] for entry in raw_lines if entry.get("text"))
+            basics["description"] = "\n\n".join(part for part in (basics["description"], summary) if part)
+            continue
+
+        if assembled.get("column_layout") and normalized_title in {"CERTIFICATIONS", "CERTIFICACIONES", "LANGUAGES", "IDIOMAS"}:
+            values: list[str] = []
+            previous = None
+            for entry in raw_lines:
+                text = entry.get("text", "").strip()
+                if not text:
+                    continue
+                if (
+                    values and previous and "CERTIFIC" in normalized_title
+                    and entry["page"] == previous["page"]
+                    and entry["top"] - previous["bottom"] <= entry["font_size"] * 0.5
+                ):
+                    values[-1] = f"{values[-1]} {text}"
+                else:
+                    values.append(text)
+                previous = entry
+            if values:
+                section_id = f"extra-{len(parsed_extras)}"
+                parsed_extras.append({"section_id": section_id, "title": title, "mode": "subtitle_items", "entries": [{"subtitle": value, "items": []} for value in values]})
+                detected_order.append(section_id)
+            continue
 
         if normalized_title in EXPERIENCE_SECTION_TITLES:
             data["experience"].extend(_map_experience(parse_experience(raw_lines)))

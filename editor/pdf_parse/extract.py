@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Optional
 
 from .constants import (
@@ -127,6 +128,7 @@ class Line:
     is_open_date_range: bool = False
     is_bold: bool = False
     size_ratio: float = 0.0
+    region: str = ""
 
 
 def extract_lines(file_obj) -> list[Line]:
@@ -136,9 +138,27 @@ def extract_lines(file_obj) -> list[Line]:
     except Exception as exc:
         raise RuntimeError("pdfplumber no esta instalado. Ejecuta pip install -r requirements.txt.") from exc
     lines: list[Line] = []
+    sidebar_fraction: float | None = None
     file_obj.seek(0)
     with pdfplumber.open(file_obj) as pdf:
         for page_index, page in enumerate(pdf.pages, start=1):
+            # A tall sidebar is an independent reading region, not an inline column.
+            if page_index == 1:
+                for rect in page.rects or []:
+                    width = rect.get("width", 0.0) or 0.0
+                    if (
+                        rect.get("x0", 0.0) <= page.width * 0.05
+                        and page.width * 0.2 <= width <= page.width * 0.45
+                        and (rect.get("height", 0.0) or 0.0) >= page.height * 0.7
+                    ):
+                        sidebar_fraction = rect["x1"] / page.width
+                        break
+
+            def region(word) -> str:
+                if sidebar_fraction is None:
+                    return ""
+                return "sidebar" if word["x0"] < page.width * sidebar_fraction else "main"
+
             words = page.extract_words(
                 use_text_flow=True,
                 keep_blank_chars=False,
@@ -147,7 +167,7 @@ def extract_lines(file_obj) -> list[Line]:
             if not words:
                 continue
 
-            words_sorted = sorted(words, key=lambda word: (round(word["top"], 1), word["x0"]))
+            words_sorted = sorted(words, key=lambda word: (region(word), round(word["top"], 1), word["x0"]))
             current: list[dict] = []
             current_key = None
             page_lines: list[Line] = []
@@ -176,17 +196,18 @@ def extract_lines(file_obj) -> list[Line]:
                         bottom=bottom,
                         fontname=fontname,
                         font_size=font_size,
+                        region=region(current[0]),
                     )
                 )
                 current = []
 
             for word in words_sorted:
-                key = round(word["top"], 1)
+                key = (region(word), round(word["top"], 1))
                 if current_key is None:
                     current_key = key
                     current = [word]
                     continue
-                if abs(key - current_key) > 2.0:
+                if key[0] != current_key[0] or abs(key[1] - current_key[1]) > 2.0:
                     flush()
                     current_key = key
                     current = [word]
@@ -194,6 +215,10 @@ def extract_lines(file_obj) -> list[Line]:
                     current.append(word)
 
             flush()
+            page_lines = [line for line in page_lines if not (
+                line.top > page.height * 0.9
+                and re.fullmatch(r"(?:page|página|pagina)\s+\d+\s*(?:of|de|/)\s*\d+", line.text, re.IGNORECASE)
+            )]
 
             rects = page.rects or []
             if rects and page_lines:
@@ -224,12 +249,13 @@ def enrich_features(lines: list[Line]) -> None:
     """Enriquece lineas con features derivadas para deteccion de secciones."""
     if not lines:
         return
-    per_page_min_x0: dict[int, float] = {}
-    per_page_sizes: dict[int, list[float]] = {}
+    per_page_min_x0: dict[tuple, float] = {}
+    per_page_sizes: dict[tuple, list[float]] = {}
     for line in lines:
-        per_page_min_x0[line.page] = min(per_page_min_x0.get(line.page, line.x0), line.x0)
+        key = (line.page, line.region)
+        per_page_min_x0[key] = min(per_page_min_x0.get(key, line.x0), line.x0)
         if line.font_size:
-            per_page_sizes.setdefault(line.page, []).append(line.font_size)
+            per_page_sizes.setdefault(key, []).append(line.font_size)
 
     per_page_median_size = {
         page: _median(values) for page, values in per_page_sizes.items() if values
@@ -237,8 +263,9 @@ def enrich_features(lines: list[Line]) -> None:
 
     for line in lines:
         line.text = normalize_spaces(line.text)
-        line.indent = line.x0 - per_page_min_x0.get(line.page, 0.0)
-        median_size = per_page_median_size.get(line.page, 0.0)
+        key = (line.page, line.region)
+        line.indent = line.x0 - per_page_min_x0.get(key, 0.0)
+        median_size = per_page_median_size.get(key, 0.0)
         if median_size and line.font_size:
             line.size_ratio = line.font_size / median_size
         else:
