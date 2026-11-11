@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
 from .constants import EMAIL_RE, KNOWN_SECTION_TITLES, PHONE_RE, URL_RE
 from .extract import Line, enrich_features
@@ -73,6 +74,8 @@ def is_section_title(line: Line, use_text: bool = True, use_visual: bool = True)
     """Determina si una linea debe tratarse como titulo de seccion."""
     text = line.text.strip()
     normalized_text = normalize_section_title(text)
+    if line.region and normalized_text not in KNOWN_SECTION_TITLES and line.size_ratio < 1.18 and not line.has_rule_below:
+        return False
     if not text:
         return False
     if line.is_bullet:
@@ -127,7 +130,10 @@ def parse_header(lines: list[Line]) -> dict:
             header["email"] = match_email.group(0)
 
         match_phone = PHONE_RE.search(text)
-        if match_phone and not header["phone"]:
+        phone_in_url = match_phone and any(
+            match.start() <= match_phone.start() < match.end() for match in URL_RE.finditer(text)
+        )
+        if match_phone and not phone_in_url and not header["phone"]:
             header["phone"] = match_phone.group(0)
 
         for url in URL_RE.findall(text):
@@ -164,6 +170,51 @@ def assemble_sections(lines: list[Line]) -> dict:
     """Agrupa lineas enriquecidas en header y secciones detectadas."""
     enrich_features(lines)
     lines = sorted(lines, key=lambda item: (item.page, item.top, item.x0))
+    if any(line.region for line in lines):
+        return _assemble_columns(lines)
+    return _assemble_stream(lines)
+
+
+def _assemble_columns(lines: list[Line]) -> dict:
+    """Keep independent sidebar/main section state and merge only contact fields."""
+    result = _assemble_stream([line for line in lines if line.region == "main"])
+    header_lines = result["header_lines"]
+    if header_lines:
+        largest = max(line.font_size for line in header_lines)
+        names = [line for line in header_lines if line.font_size >= largest - 0.1]
+        result["header"]["name"] = " ".join(line.text for line in names)
+        result["header_lines"] = [line for line in header_lines if line not in names]
+        locations = [line.text for line in header_lines if "," in line.text and not (line.has_email or line.has_url)]
+        if locations:
+            result["header"]["location"] = locations[-1]
+    sidebar = _assemble_stream([line for line in lines if line.region == "sidebar"])
+    for section in sidebar["sections"]:
+        if section["title"] in {"CONTACTAR", "CONTACTO", "CONTACT"}:
+            contact_lines: list[Line] = []
+            for raw in section["raw"]:
+                line = Line(**{key: raw[key] for key in ("text", "page", "x0", "x1", "top", "bottom")})
+                previous = contact_lines[-1] if contact_lines else None
+                if (
+                    previous and line.page == previous.page and line.top - previous.bottom < 5
+                    and (EMAIL_RE.search(previous.text) or URL_RE.search(previous.text))
+                    and re.fullmatch(r"[\w@./+\-]+", line.text)
+                    and not (EMAIL_RE.search(line.text) or URL_RE.search(line.text))
+                ):
+                    contact_lines[-1] = replace(previous, text=previous.text + line.text, bottom=line.bottom)
+                else:
+                    contact_lines.append(line)
+            contacts = parse_header(contact_lines)
+            for key in ("email", "phone", "links"):
+                if contacts[key]:
+                    result["header"][key] = contacts[key]
+        else:
+            result["sections"].append(section)
+    result["column_layout"] = True
+    return result
+
+
+def _assemble_stream(lines: list[Line]) -> dict:
+    """Assemble one reading stream without mixing independently flowing columns."""
 
     # Mantener detección textual/visual activa en todo el documento.
     # has_rule_below ya actúa como señal fuerte dentro de is_section_title.
@@ -217,6 +268,12 @@ def assemble_sections(lines: list[Line]) -> dict:
                 "is_bold": line.is_bold,
                 "size_ratio": line.size_ratio,
                 "ends_with_colon": line.ends_with_colon,
+                "top": line.top,
+                "bottom": line.bottom,
+                "x0": line.x0,
+                "x1": line.x1,
+                "font_size": line.font_size,
+                "region": line.region,
             }
         )
 

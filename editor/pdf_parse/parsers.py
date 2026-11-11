@@ -32,6 +32,10 @@ HONOR_HINT_RE = re.compile(
     r"\b(?:honores?|honors?|honours?|cum\s+laude|distinction|distinci[oó]n|menci[oó]n)\b",
     re.IGNORECASE,
 )
+DURATION_RE = re.compile(
+    r"(?:\d+\s+(?:años?|mes(?:es)?|years?|months?)(?:\s+(?:y|and))?\s*)+",
+    re.IGNORECASE,
+)
 
 
 def _strip_trailing_bullet(text: str) -> str:
@@ -173,6 +177,8 @@ def _looks_like_honor_line(text: str) -> bool:
 
 def parse_experience(raw_lines: list[dict]) -> list[dict]:
     """Parsea lineas de experiencia en bloques con rol, empresa, fechas e items."""
+    if any(entry.get("region") == "main" for entry in raw_lines):
+        return _parse_positioned_entries(raw_lines, education=False)
     blocks: list[dict] = []
     current: dict | None = None
     pending_bullet_index: int | None = None
@@ -304,6 +310,8 @@ def parse_experience(raw_lines: list[dict]) -> list[dict]:
 
 def parse_education(raw_lines: list[dict]) -> list[dict]:
     """Parsea lineas de educacion en bloques con institucion, programa y fechas."""
+    if any(entry.get("region") == "main" for entry in raw_lines):
+        return _parse_positioned_entries(raw_lines, education=True)
     blocks: list[dict] = []
     current: dict | None = None
 
@@ -377,6 +385,97 @@ def parse_education(raw_lines: list[dict]) -> list[dict]:
         if any([block["org"], block["program"], block["honors"], block["date_range"], block["location"]]):
             cleaned.append(block)
     return cleaned
+
+
+def _parse_positioned_entries(raw_lines: list[dict], *, education: bool) -> list[dict]:
+    """Use relative typography and dates, not short prose, as entry boundaries."""
+    joined_lines: list[dict] = []
+    for line in raw_lines:
+        previous_line = joined_lines[-1] if joined_lines else None
+        if (
+            previous_line and previous_line["text"].count("(") > previous_line["text"].count(")")
+            and not _extract_date_from_line(previous_line["text"])[0]
+            and _extract_date_from_line(line.get("text", ""))[0]
+        ):
+            joined_lines[-1] = {**previous_line, "text": f"{previous_line['text']} {line['text']}", "bottom": line.get("bottom", 0)}
+        else:
+            joined_lines.append(line)
+    raw_lines = joined_lines
+    sizes = sorted(float(line.get("font_size") or 0) for line in raw_lines if line.get("font_size"))
+    date_sizes = sorted(float(line.get("font_size") or 0) for line in raw_lines if _extract_date_from_line(line.get("text", ""))[0])
+    body_size = date_sizes[len(date_sizes) // 2] if date_sizes else min(sizes, default=0)
+    org_size = max(sizes, default=0)
+    blocks: list[dict] = []
+    organization = ""
+    identity: list[str] = []
+    current = None
+    previous = None
+    role_key = "program" if education else "role"
+    for line in raw_lines:
+        text, marker = _strip_bullet_markers(line.get("text", ""))
+        if not text:
+            continue
+        date_range, remainder = _extract_date_from_line(text)
+        size = float(line.get("font_size") or 0)
+        bullet = bool(line.get("is_bullet")) or marker
+        if DURATION_RE.fullmatch(text.strip("() ")):
+            continue
+        if not date_range and not bullet and size >= org_size - 0.1 and org_size > body_size * 1.08:
+            if current is None and previous and previous.get("font_size") == size and identity == []:
+                organization = normalize_spaces(f"{organization} {text}")
+            else:
+                organization = text
+            current = None
+            identity = []
+            previous = line
+            continue
+        if date_range:
+            remainder = re.sub(r"\([^)]*\d+\s+(?:años?|meses?|years?|months?)[^)]*\)", "", remainder, flags=re.IGNORECASE).strip("() ·")
+            if DURATION_RE.fullmatch(remainder):
+                remainder = ""
+            if remainder:
+                identity.append(remainder)
+            if current is None:
+                current = {
+                    "org": organization, role_key: " ".join(identity), "date_range": date_range,
+                    "location": None, "meta_tech": None, "items": [], "extra": [], "honors": None,
+                    "positioned": True,
+                }
+                blocks.append(current)
+            else:
+                current["date_range"] = date_range
+            previous = line
+            continue
+        if current is not None and not bullet and not education and size > body_size * 1.04:
+            current = None
+            identity = []
+        if current is None:
+            identity.append(text)
+            previous = line
+            continue
+        if (
+            previous and _extract_date_from_line(previous.get("text", ""))[0]
+            and not bullet and len(text) < 100 and not text.endswith(".")
+            and ("," in text or float(line.get("top", 0)) - float(previous.get("bottom", 0)) <= size * 0.5)
+        ):
+            current["location"] = text
+            previous = line
+            continue
+        values = current["extra"] if education else current["items"]
+        new_paragraph = previous and previous.get("text", "").rstrip().endswith((".", "!", "?")) and text[:1].isupper()
+        continuation = previous and (
+            (previous.get("page") != line.get("page") and not new_paragraph)
+            or (previous.get("page") == line.get("page") and float(line.get("top", 0)) - float(previous.get("bottom", 0)) <= size * 0.8)
+        )
+        if values and not bullet and continuation:
+            if education:
+                values[-1] = normalize_spaces(f"{values[-1]} {text}")
+            else:
+                values[-1]["text"] = normalize_spaces(f"{values[-1]['text']} {text}")
+        else:
+            values.append(text if education else {"text": text})
+        previous = line
+    return blocks
 
 
 def parse_skills(raw_lines: list[dict]) -> list[dict]:

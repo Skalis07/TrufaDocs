@@ -10,7 +10,7 @@ Branch: `fix/cv-import-fidelity`; delivery: exception-ok (explicit size:exceptio
 
 ## Tasks
 
-- [ ] T1 | S1,S3 | inline (one coherent import fix; no writer trigger) | implementation and independent verification complete; delivery strategy/commit pending | RED: English 1/2 jobs, Spanish 3/2 jobs and anonymous compatibility regressions; GREEN: 49-test suite and targeted independent recheck.
+- [x] T1 | S1,S3 | inline (one coherent import fix; no writer trigger) | commit: `948abe7` | RED: English 1/2 jobs, Spanish 3/2 jobs and anonymous compatibility regressions; GREEN: 49-test feature suite, targeted independent recheck and 46/46 staged-unit tests.
 - [ ] T2 | S2,S3 | inline (same feature; no parallel writer or context trigger) | implementation and independent verification complete; delivery strategy/commit pending | RED: synthetic layout/contact/continuation failures and missing real education/locations; GREEN: 49-test suite, complete source-field comparisons and targeted independent recheck.
 
 ## Log
@@ -29,3 +29,4 @@ Branch: `fix/cv-import-fidelity`; delivery: exception-ok (explicit size:exceptio
 - L12 — 2026-11-11: Independent scoped recheck resolved all three blockers and the paragraph advisory; five targeted tests passed in 2.613 seconds. Original-source job locations and paragraph content/boundaries match. S1/S2/S3 pass within their verified scope. Existing description/social-link/detailed-extra DOCX round-trip limitations are baseline advisories, not part of this correction; actual Word conversion was not run. RDD remains off; no push/PR/merge authorized. Commit organization awaits the reviewer-burden decision.
 - L13 — 2026-11-11: Final authored source/test delta: 609 lines (384 tracked additions + 29 tracked deletions + 196 new synthetic test lines), excluding this tracker. No size-only code reduction is appropriate: the tests are the preservation evidence. Await one delivery organization decision before local work-unit commits.
 - L14 — 2026-11-11: User selected "Una entrega con excepción" in the native delivery question, explicitly accepting size:exception for one delivery with local work-unit commits. Resolved delivery strategy: exception-ok; chain strategy: not applicable. No push, PR or merge is authorized.
+- L15 — 2026-11-11: T1 committed as `948abe7` (fix: preserve DOCX import entries and list metadata). Its staged tree independently passed 46/46 tests in 6.154 seconds in a temporary scratch copy, without uncommitted PDF changes. RDD disabled/unmanaged; ordinary repository policy applied. Rollback boundary is this DOCX/shared-text unit and its tests; no export/template/UI changes.
