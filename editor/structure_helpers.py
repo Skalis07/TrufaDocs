@@ -57,12 +57,13 @@ def _group_entries(lines: List[str], section: str) -> List[List[str]]:
     entries: List[List[str]] = []
     current: List[str] = []
 
-    for line in lines:
+    for index, line in enumerate(lines):
         if not line.strip():
             continue
         if _match_heading(line)[0]:
             continue
-        if current and _looks_like_entry_start(line, current, section):
+        next_line = lines[index + 1] if index + 1 < len(lines) else ""
+        if current and _looks_like_entry_start(line, current, section, next_line):
             entries.append(current)
             current = [line]
             continue
@@ -75,7 +76,7 @@ def _group_entries(lines: List[str], section: str) -> List[List[str]]:
 
 
 # Reglas para detectar cuando empieza una nueva entrada
-def _looks_like_entry_start(line: str, current: List[str], section: str) -> bool:
+def _looks_like_entry_start(line: str, current: List[str], section: str, next_line: str = "") -> bool:
     """Decide si `line` marca el inicio de una nueva entrada en la sección actual.
 
     Evita cortar por bullets, fechas o líneas de tecnologías. Luego usa señales
@@ -91,7 +92,13 @@ def _looks_like_entry_start(line: str, current: List[str], section: str) -> bool
     if section == "experience":
         return has_date or has_bullets
     if section == "education":
-        return has_date or any(_looks_like_org(item) for item in current)
+        explicit_org = any(hint in _normalize_ascii(line) for hint in ORG_HINTS)
+        next_is_degree = any(hint in _normalize_ascii(next_line) for hint in DEGREE_HINTS)
+        return has_date or has_bullets or (
+            len(current) >= 2
+            and (explicit_org or next_is_degree)
+            and any(_looks_like_org(item) for item in current)
+        )
     return False
 
 
@@ -454,7 +461,7 @@ def _normalize_date_token(value: str) -> str:
             month = f"0{month}"
         return f"{year}-{month}"
 
-    parts = value.replace(".", "").split()
+    parts = re.sub(r"\s+de\s+", " ", value.replace(".", ""), flags=re.IGNORECASE).split()
     if len(parts) >= 2:
         month_key = _normalize_ascii(parts[0])
         year = parts[1]
