@@ -11,26 +11,29 @@ MONTH_TOKEN = (
     r")"
 )
 YEAR = r"(?:19|20)\d{2}"
+DATE_VALUE = rf"(?:{MONTH_TOKEN}\.?\s+(?:de\s+)?{YEAR}|{YEAR})"
 
 DATE_RANGE_RE = re.compile(
-    rf"\b{MONTH_TOKEN}\s+{YEAR}\s*(?:[-–—]|a|to|hasta)\s*{MONTH_TOKEN}\s+{YEAR}\b",
+    rf"\b{DATE_VALUE}\s*(?:[-–—]|a|to|hasta)\s*{DATE_VALUE}\b",
     re.IGNORECASE,
 )
 
 DATE_RANGE_OPEN_RE = re.compile(
-    rf"\b{MONTH_TOKEN}\s+{YEAR}\s*(?:[-–—]|a|to|hasta)\s*(Presente|Actualidad|Hoy|Current|Present)\b",
+    rf"\b{DATE_VALUE}\s*(?:[-–—]|a|to|hasta)\s*(Presente|Actualidad|Hoy|Current|Present)\b",
     re.IGNORECASE,
 )
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 PHONE_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
-URL_RE = re.compile(r"\bhttps?://\S+|\bwww\.\S+", re.IGNORECASE)
+URL_RE = re.compile(r"\bhttps?://\S+|\bwww\.\S+|\b(?:github|linkedin)\.com/\S+", re.IGNORECASE)
 
 BULLET_CHARS = ("●", "•", "◦", "-", "–", "—", "·")
 TECH_PREFIX_RE = re.compile(r"^\s*Tecnolog[ií]as\s*:\s*", re.IGNORECASE)
 HONORS_PREFIX_RE = re.compile(r"^\s*(?:Honores?|Honors?|Honours?)\s*:\s*", re.IGNORECASE)
 
 KNOWN_SECTION_TITLES = {
+    "CONTACTAR", "CONTACTO", "CONTACT", "APTITUDES PRINCIPALES", "TOP SKILLS",
+    "EXTRACTO", "SUMMARY", "LANGUAGES", "CERTIFICATIONS", "EXPERIENCE", "EDUCATION", "SKILLS",
     "EXPERIENCIA",
     "EXPERIENCIA PROFESIONAL",
     "EXPERIENCIA LABORAL",

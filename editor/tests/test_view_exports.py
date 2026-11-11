@@ -5,6 +5,7 @@ import zipfile
 from unittest.mock import patch
 from xml.etree import ElementTree as etree
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from docx import Document as DocxDocument
 
@@ -124,6 +125,45 @@ def _font_names_by_xml(blob: bytes) -> dict[str, set[str]]:
 class ViewExportSmokeTests(SimpleTestCase):
     """Verifica cableado entre POST estructurado, parser y exportacion."""
 
+    def test_docx_upload_preserves_existing_undated_education_entries(self) -> None:
+        """Explicit institutions still delimit entries when no dates are available."""
+        document = DocxDocument()
+        for text in ("Alex Example", "Professional profile", "EDUCATION", "Example University", "Bachelor of Science", "Second University", "Master of Science"):
+            document.add_paragraph(text)
+        blob = io.BytesIO()
+        document.save(blob)
+        response = self.client.post("/upload/", {"file": SimpleUploadedFile("ordinary.docx", blob.getvalue())})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([entry["institution"] for entry in response.context["structured"]["education"]], ["Example University", "Second University"])
+
+    def test_docx_upload_keeps_undated_institutions_without_organization_keywords(self) -> None:
+        """Degree context delimits institutions without relying on their names."""
+        document = DocxDocument()
+        for text in ("Alex Example", "Professional profile", "EDUCATION", "Aurora Institute", "Bachelor of Science", "Meridian Conservatory", "Master of Science"):
+            document.add_paragraph(text)
+        blob = io.BytesIO()
+        document.save(blob)
+        response = self.client.post("/upload/", {"file": SimpleUploadedFile("ordinary.docx", blob.getvalue())})
+        self.assertEqual(response.status_code, 200)
+        education = response.context["structured"]["education"]
+        self.assertEqual([(entry["institution"], entry["degree"]) for entry in education], [("Aurora Institute", "Bachelor of Science"), ("Meridian Conservatory", "Master of Science")])
+
+    def test_docx_upload_does_not_reclassify_pre_date_prose_as_technologies(self) -> None:
+        """Ordinary body prose remains a highlight even before the date line."""
+        for prose in ("Maintained distributed services.", "Maintained distributed services"):
+            with self.subTest(prose=prose):
+                document = DocxDocument()
+                for text in ("Alex Example", "Professional profile", "EXPERIENCIA", "Example Company", "Software Engineer", prose, "Jan 2021 - Dec 2022", "- Delivered reliable releases."):
+                    document.add_paragraph(text)
+                blob = io.BytesIO()
+                document.save(blob)
+                response = self.client.post("/upload/", {"file": SimpleUploadedFile("ordinary.docx", blob.getvalue())})
+                self.assertEqual(response.status_code, 200)
+                jobs = response.context["structured"]["experience"]
+                self.assertEqual(len(jobs), 1)
+                self.assertEqual(jobs[0]["technologies"], "")
+                self.assertEqual(jobs[0]["highlights"], [prose, "Delivered reliable releases."])
+
     def test_export_docx_returns_a_generated_document_from_structured_post(self) -> None:
         """DOCX debe generarse desde el POST actual sin perder items ni extras."""
         response = self.client.post(DOCX_EXPORT_URL, _export_payload())
@@ -182,3 +222,52 @@ class ViewExportSmokeTests(SimpleTestCase):
         exported_text = _docx_text(response.content)
         self.assertIn("Present", exported_text)
         self.assertNotIn("Actualidad", exported_text)
+
+    def test_generated_docx_reimports_without_splitting_entries_or_losing_items(self) -> None:
+        """The public export/upload path must preserve both supported languages."""
+        for language in ("en", "es"):
+            with self.subTest(language=language):
+                payload = _export_payload()
+                payload.update({
+                    "ui_lang": language,
+                    "exp_company": ["Example Company", "Second Company"],
+                    "exp_role": ["Software Engineer", "Platform Engineer"],
+                    "exp_start": ["2021-01", "2023-07"],
+                    "exp_end": ["2023-06", "2025-12"],
+                    "exp_city": ["Santiago", "Santiago"],
+                    "exp_country": ["Chile", "Chile"],
+                    "exp_tech": ["Python", "SQL"],
+                    "exp_highlights": ["Built Service\nLed Migration", "Improved Performance"],
+                    "edu_institution": ["Example University", "Second University"],
+                    "edu_degree": ["Computer Science", "Software Engineering"],
+                    "edu_start": ["2015-03", "2020-01"],
+                    "edu_end": ["2019-12", "2020-12"],
+                    "edu_city": ["Santiago", "Santiago"],
+                    "edu_country": ["Chile", "Chile"],
+                    "edu_items": ["Research Scholarship\nGraduation Project", "Advanced Course"],
+                })
+                exported = self.client.post(DOCX_EXPORT_URL, payload)
+                self.assertEqual(exported.status_code, 200)
+                uploaded = self.client.post("/upload/", {
+                    "ui_lang": language,
+                    "file": SimpleUploadedFile("generated.docx", exported.content),
+                })
+                self.assertEqual(uploaded.status_code, 200)
+                structured = uploaded.context["structured"]
+                jobs = structured["experience"]
+                self.assertEqual(len(jobs), 2)
+                for index in range(2):
+                    for field in ("company", "role", "start", "end", "city", "country", "technologies"):
+                        key = "exp_tech" if field == "technologies" else f"exp_{field}"
+                        self.assertEqual(jobs[index][field], payload[key][index])
+                    self.assertEqual(jobs[index]["highlights"], payload["exp_highlights"][index].splitlines())
+                education = structured["education"]
+                self.assertEqual(len(education), 2)
+                for index in range(2):
+                    for field in ("institution", "degree", "start", "end", "city", "country"):
+                        self.assertEqual(education[index][field], payload[f"edu_{field}"][index])
+                    self.assertEqual(education[index]["items"], payload["edu_items"][index].splitlines())
+                self.assertEqual(structured["basics"]["name"], payload["name"])
+                self.assertEqual(structured["basics"]["email"], payload["email"])
+                self.assertEqual(structured["skills"][0]["items"], "Python, SQL")
+                self.assertEqual(structured["meta"]["core_order"], "experience,education,skills,extra-0")

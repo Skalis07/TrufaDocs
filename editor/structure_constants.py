@@ -7,7 +7,7 @@ URL_RE = re.compile(r"(https?://[^\s]+|www\.[^\s]+)", re.IGNORECASE)
 BULLET_RE = re.compile(r"^\s*[\u2022\u2023\u25cf\u25a0\u25aa\u25cb\u25e6\u2043\u2219\-\*]\s+")
 LOCATION_RE = re.compile(r"(?P<city>[A-Za-zÀ-ÿ.'\-\s]+),\s*(?P<country>[A-Za-zÀ-ÿ.'\-\s]+)$")
 
-DATE_TOKEN = r"(?:\d{1,2}/\d{4}|\d{4}|[A-Za-z]{3,}\s+\d{4})"
+DATE_TOKEN = r"(?:\d{1,2}/\d{4}|[A-Za-zÀ-ÿ]{3,}\.?\s+(?:de\s+)?\d{4}|\d{4})"
 DATE_RANGE_RE = re.compile(
     rf"(?P<start>{DATE_TOKEN})\s*(?:-|\u2013|\u2014|a|to|hasta)\s*(?P<end>{DATE_TOKEN}|actualidad|presente|hoy|current|present)",
     re.IGNORECASE,
@@ -16,6 +16,7 @@ DATE_RANGE_RE = re.compile(
 # Palabras clave para detectar titulos de seccion
 SECTION_KEYWORDS = {
     "experience": [
+        "experience",
         "experiencia",
         "experiencia profesional",
         "experiencia laboral",
@@ -41,6 +42,7 @@ EXTRA_KEYWORDS = [
 # Pistas para detectar organizaciones e instituciones
 ORG_HINTS = [
     "universidad",
+    "university",
     "instituto",
     "company",
     "corp",
