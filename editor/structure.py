@@ -1082,6 +1082,7 @@ def _parse_education(lines: List[str]) -> List[Dict]:
             if not item["institution"]:
                 item["institution"] = line.strip()
                 continue
+            item["items"].append(line)
         education.append(item)
     return education or default_structure()["education"]
 

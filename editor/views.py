@@ -22,6 +22,7 @@ from .structure import (
     structure_from_post,
 )
 from .docx_template import render_from_template
+from .structure_helpers import _extract_date_range_from_line, _match_heading
 
 # Tipos de archivo permitidos para upload
 ALLOWED_EXTENSIONS = {".docx", ".pdf"}
@@ -249,12 +250,20 @@ def text_upload(request):
 
     ext = _extension(uploaded.name)
     if ext == ".docx":
-        text, error = _extract_docx_text(uploaded)
+        technologies: dict[tuple, str] = {}
+        text, error = _extract_docx_text(uploaded, technologies=technologies)
         if error:
             return _text_error(request, _translate_backend_error(request, error) or error)
         if not text.strip():
             return _text_error(request, _msg(request, "upload_extract_text_failed"))
         structured = parse_resume(text)
+        for job in structured["experience"]:
+            key = tuple(job.get(field, "") for field in ("company", "role", "start", "end"))
+            if key in technologies:
+                detail = technologies[key]
+                job["technologies"] = detail
+                if detail in job["highlights"]:
+                    job["highlights"].remove(detail)
     else:
         structured, error = parse_pdf_to_structure(uploaded)
         if error:
@@ -428,7 +437,7 @@ def _safe_filename(name: str) -> str:
     return safe[:80] or "documento"
 
 
-def _extract_docx_text(file_obj) -> tuple[str, str | None]:
+def _extract_docx_text(file_obj, *, technologies: dict | None = None) -> tuple[str, str | None]:
     """Extrae texto legible de un archivo DOCX.
 
     Estrategia:
@@ -442,22 +451,49 @@ def _extract_docx_text(file_obj) -> tuple[str, str | None]:
         return "", "El archivo DOCX esta vacio."
 
     lines: list[str] = []
+
+    def paragraph_text(paragraph) -> str:
+        """Keep list semantics that Word stores outside paragraph text."""
+        text = paragraph.text.strip()
+        properties = paragraph._p.pPr
+        if text and properties is not None and properties.numPr is not None:
+            text = f"• {text}"
+        return text
+
     try:
         doc = DocxDocument(io.BytesIO(raw))
         for paragraph in doc.paragraphs:
-            text = paragraph.text.strip()
+            text = paragraph_text(paragraph)
             if text:
                 lines.append(text)
         for table in doc.tables:
+            module = ""
             for row in table.rows:
                 row_cells: list[list[str]] = []
                 for cell in row.cells:
-                    cell_lines = [p.text.strip() for p in cell.paragraphs if p.text.strip()]
-                    if cell_lines:
+                    cell_lines = [paragraph_text(p) for p in cell.paragraphs if p.text.strip()]
+                    if cell_lines and cell_lines not in row_cells:
                         row_cells.append(cell_lines)
 
                 if not row_cells:
                     continue
+
+                # Preserve explicit table metadata without guessing from free prose.
+                if len(row_cells[0]) == 1:
+                    heading, _ = _match_heading(row_cells[0][0])
+                    if heading:
+                        module = heading
+                if (
+                    technologies is not None and module == "experience"
+                    and len(row_cells) == 2 and len(row_cells[0]) == 3
+                    and any(run.bold is True for run in row.cells[0].paragraphs[0].runs)
+                ):
+                    for value in row_cells[1]:
+                        start, end, _ = _extract_date_range_from_line(value)
+                        if start or end:
+                            company, role, detail = row_cells[0]
+                            technologies[(company, role, start, end)] = detail
+                            break
 
                 seen_cells: set[str] = set()
                 for cell_lines in row_cells:
