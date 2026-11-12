@@ -4,6 +4,10 @@
 .env
 .venv/
 
+# Private local configuration and tracking
+/.atl/
+/odd/
+
 # ------------------------------
 # Python / tooling caches
 # ------------------------------
